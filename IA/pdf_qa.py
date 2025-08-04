@@ -1,6 +1,6 @@
 import google.generativeai as genai
-from api_load import load_api
-from AI_operations import RateLimiter
+from .api_load import load_api
+from .AI_operations import RateLimiter
 import time
 import streamlit as st
 import re
@@ -9,10 +9,8 @@ import json
 class PDFQA:
     def __init__(self):
         load_api()
-        # CORREÇÃO: Nome do modelo de IA corrigido para um válido.
-        self.model = genai.GenerativeModel('gemini-1.5-flash-latest')
-        # CORREÇÃO: Instancia o RateLimiter com limites apropriados para o Gemini 1.5 Flash.
-        # Os limites gratuitos são 15 RPM e 1,000,000 TPM.
+
+        self.model = genai.GenerativeModel('gemini-2.5-flash-latest')
         self.limiter = RateLimiter(rpm_limit=15, tpm_limit=1_000_000)
 
     def ask_gemini(self, pdf_files, question):
