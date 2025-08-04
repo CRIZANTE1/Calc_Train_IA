@@ -4,6 +4,7 @@ from end.calculos import processar_dados_colaboradores
 import io
 import csv
 import requests
+import PyPDF2
 import base64
 from weasyprint import HTML
 from datetime import datetime, time, timedelta
@@ -125,9 +126,12 @@ def configurar_barra_lateral():
 
     st.sidebar.markdown("---")
     st.sidebar.header("📥 Carregar Lista de Presença")
-    uploaded_file = st.sidebar.file_uploader("Selecione o arquivo CSV do Teams", type=['csv'])
+    uploaded_file = st.sidebar.file_uploader("Selecione o arquivo de presença (CSV ou PDF)", type=['csv', 'pdf'])
     if uploaded_file is not None:
-        processar_arquivo_csv(uploaded_file, start_time, training_duration, min_presence)
+        if uploaded_file.type == "text/csv":
+            processar_arquivo_csv(uploaded_file, start_time, training_duration, min_presence)
+        elif uploaded_file.type == "application/pdf":
+            processar_arquivo_pdf(uploaded_file, start_time, training_duration, min_presence)
 
     st.sidebar.markdown("---")
     if st.sidebar.button("➕ Adicionar Colaborador Manualmente"):
@@ -212,6 +216,86 @@ def processar_arquivo_csv(uploaded_file, start_time, training_duration, min_pres
 
     except Exception as e:
         st.sidebar.error(f"Erro ao processar o arquivo: {e}")
+
+def processar_arquivo_pdf(uploaded_file, start_time, training_duration, min_presence):
+    try:
+        reader = PyPDF2.PdfReader(uploaded_file)
+        text = ""
+        for page in reader.pages:
+            text += page.extract_text() + "\n"
+
+        # For simplicity, let's assume the PDF text has lines similar to CSV
+        # We will try to parse lines that contain "Joined" or "Left" and a timestamp
+        lines = text.splitlines()
+        
+        # This part will be highly dependent on the PDF structure.
+        # For a robust solution, you might need more advanced NLP or regex.
+        # Here, we'll try to mimic the CSV parsing logic as much as possible.
+        
+        data_rows = []
+        for line in lines:
+            # Example: "Full Name,Timestamp,Action"
+            # We need to find lines that contain these patterns
+            if "Joined" in line or "Left" in line:
+                # Attempt to extract name, timestamp, and action
+                # This is a very basic and likely fragile parsing.
+                # A real-world solution would need more sophisticated parsing.
+                parts = line.split(',')
+                if len(parts) >= 3:
+                    try:
+                        name = parts[0].strip()
+                        timestamp_str = parts[1].strip()
+                        action = parts[2].strip()
+                        data_rows.append([name, timestamp_str, action])
+                    except Exception as e:
+                        st.warning(f"Could not parse line from PDF: {line} - {e}")
+
+        if not data_rows:
+            st.sidebar.warning("Nenhum dado de colaborador encontrado no PDF. Verifique o formato do arquivo.")
+            return
+
+        df = pd.DataFrame(data_rows, columns=['Full Name', 'Timestamp', 'Action'])
+        
+        # Continue with the same processing logic as CSV
+        if 'Full Name' in df.columns and 'Timestamp' in df.columns and 'Action' in df.columns:
+            df['Timestamp'] = pd.to_datetime(df['Timestamp'], format='%m/%d/%Y, %I:%M:%S %p', errors='coerce')
+            df.dropna(subset=['Timestamp'], inplace=True) # Remove rows where timestamp parsing failed
+            df = df.sort_values(by=['Full Name', 'Timestamp'])
+
+            st.session_state.colaboradores = []
+            if not df.empty:
+                training_start_datetime = datetime.combine(df['Timestamp'].iloc[0].date(), start_time)
+
+                for name, group in df.groupby('Full Name'):
+                    total_duration = timedelta(0)
+                    last_join_time = None
+                    for _, row in group.iterrows():
+                        if row['Action'] == 'Joined':
+                            last_join_time = row['Timestamp']
+                        elif row['Action'] == 'Left' and last_join_time is not None:
+                            total_duration += row['Timestamp'] - last_join_time
+                            last_join_time = None
+                    if last_join_time is not None:
+                        total_duration += df['Timestamp'].max() - last_join_time
+
+                    presence_percentage = (total_duration.total_seconds() / (training_duration * 60)) * 100
+                    frequencia_ok = presence_percentage >= min_presence
+
+                    st.session_state.colaboradores.append({
+                        'nome': name,
+                        'frequencia': frequencia_ok,
+                        'check_ins_pontuais': 0,
+                    })
+                st.sidebar.success(f"{len(st.session_state.colaboradores)} colaboradores processados do PDF!")
+            else:
+                st.sidebar.warning("Nenhum dado válido de colaborador encontrado no PDF após a filtragem.")
+        else:
+            st.sidebar.error(f"Colunas necessárias não encontradas no PDF. Esperado: 'Full Name', 'Timestamp', 'Action'. Encontrado: {list(df.columns)}")
+
+    except Exception as e:
+        st.sidebar.error(f"Erro ao processar o arquivo PDF: {e}")
+        st.sidebar.info("O processamento de PDF é experimental e pode exigir um formato específico.")
+
 
 def desenhar_formulario_colaboradores(total_oportunidades: int, total_check_ins: int):
     st.header("👤 Dados dos Colaboradores")
