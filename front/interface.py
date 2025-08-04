@@ -1,14 +1,13 @@
-
 import streamlit as st
 import pandas as pd
 import io
-import csv
 import requests
-
-from IA.pdf_qa import PDFQA
 import base64
 from weasyprint import HTML
 from datetime import datetime, time, timedelta
+
+# Importação do pacote IA
+from IA.pdf_qa import PDFQA
 
 # --- Funções de Geração de PDF ---
 
@@ -126,112 +125,42 @@ def configurar_barra_lateral():
     min_presence = st.sidebar.slider("Mínimo de Presença (%)", min_value=1, max_value=100, value=70, step=1)
 
     st.sidebar.markdown("---")
-    st.sidebar.header("📥 Carregar Lista de Presença")
+    st.sidebar.header("📥 Carregar Lista de Presença (via IA)")
+    
     uploaded_file = st.sidebar.file_uploader("Selecione o arquivo de presença (CSV ou PDF)", type=['csv', 'pdf'])
     if uploaded_file is not None:
-        if uploaded_file.type == "text/csv":
-            processar_arquivo_csv(uploaded_file, start_time, training_duration, min_presence)
-        elif uploaded_file.type == "application/pdf":
-            processar_arquivo_pdf(uploaded_file, start_time, training_duration, min_presence)
+        processar_arquivo_com_ia(uploaded_file, start_time, training_duration, min_presence)
 
     st.sidebar.markdown("---")
     if st.sidebar.button("➕ Adicionar Colaborador Manualmente"):
-        # MELHORIA: A verificação de existência foi removida daqui, pois já é feita em app.py
+        if 'colaboradores' not in st.session_state:
+            st.session_state.colaboradores = []
         st.session_state.colaboradores.append({})
     
     return training_title, total_oportunidades, total_check_ins
 
-def processar_arquivo_csv(uploaded_file, start_time, training_duration, min_presence):
-    try:
-        # MELHORIA: Decodificação de CSV mais robusta. Tenta UTF-8 e depois UTF-16.
-        content_bytes = uploaded_file.getvalue()
-        try:
-            content_as_string = content_bytes.decode('utf-8')
-        except UnicodeDecodeError:
-            content_as_string = content_bytes.decode('utf-16')
-        
-        lines = content_as_string.splitlines()
-
-        header_row_index = -1
-        for i, line in enumerate(lines):
-            if 'Full Name' in line or 'Nome Completo' in line or 'Timestamp' in line or 'User Action' in line:
-                header_row_index = i
-                break
-        
-        if header_row_index == -1:
-            st.sidebar.error("Cabeçalho do CSV não encontrado. Verifique o arquivo.")
-            return
-
-        csv_content_from_header = "\n".join(lines[header_row_index:])
-        csv_file_like_object = io.StringIO(csv_content_from_header)
-
-        sniffer = csv.Sniffer()
-        dialect = sniffer.sniff(lines[header_row_index])
-        df = pd.read_csv(csv_file_like_object, sep=dialect.delimiter)
-        
-        df.columns = df.columns.str.strip()
-        column_mapping = {
-            'Nome Completo': 'Full Name',
-            'Timestamp': 'Timestamp',
-            'User Action': 'Action',
-            'Action': 'Action'
-        }
-        if 'Full Name' in df.columns:
-            column_mapping.pop('Full Name', None)
-        df.rename(columns=column_mapping, inplace=True)
-
-        if 'Full Name' in df.columns and 'Timestamp' in df.columns and 'Action' in df.columns:
-            df['Timestamp'] = pd.to_datetime(df['Timestamp'], format='%m/%d/%Y, %I:%M:%S %p')
-            df = df.sort_values(by=['Full Name', 'Timestamp'])
-
-            st.session_state.colaboradores = []
-            training_start_datetime = datetime.combine(df['Timestamp'].iloc[0].date(), start_time)
-
-            for name, group in df.groupby('Full Name'):
-                total_duration = timedelta(0)
-                last_join_time = None
-                for _, row in group.iterrows():
-                    if row['Action'] == 'Joined':
-                        last_join_time = row['Timestamp']
-                    elif row['Action'] == 'Left' and last_join_time is not None:
-                        total_duration += row['Timestamp'] - last_join_time
-                        last_join_time = None
-                if last_join_time is not None:
-                    total_duration += df['Timestamp'].max() - last_join_time
-
-                presence_percentage = (total_duration.total_seconds() / (training_duration * 60)) * 100
-                frequencia_ok = presence_percentage >= min_presence
-
-                st.session_state.colaboradores.append({
-                    'nome': name,
-                    'frequencia': frequencia_ok,
-                    'check_ins_pontuais': 0,
-                })
-            st.sidebar.success(f"{len(st.session_state.colaboradores)} colaboradores processados!")
-        else:
-            st.sidebar.error(f"Colunas necessárias não encontradas. Esperado: 'Full Name', 'Timestamp', 'Action'. Encontrado: {list(df.columns)}")
-
-    except Exception as e:
-        st.sidebar.error(f"Erro ao processar o arquivo: {e}")
-
-def processar_arquivo_pdf(uploaded_file, start_time, training_duration, min_presence):
+def processar_arquivo_com_ia(uploaded_file, start_time, training_duration, min_presence):
+    """
+    Processa um arquivo (PDF ou CSV) usando a IA para extrair dados de presença.
+    """
     try:
         if 'pdf_qa_instance' not in st.session_state:
             st.session_state.pdf_qa_instance = PDFQA()
         pdf_qa = st.session_state.pdf_qa_instance
-        
+
         extraction_prompt = """
-        Do the following:
-        - Extract the full name of each participant.
-        - Extract the timestamp of each action (Joined/Left).
-        - Extract the action (Joined or Left).
-        - Return the data as a JSON array of objects, where each object has 'Full Name', 'Timestamp', and 'Action' keys.
-        - Ensure the 'Timestamp' is in 'MM/DD/YYYY, HH:MM:SS AM/PM' format.
-        - If a participant joins and leaves multiple times, include all their entries.
-        - If a participant's name appears multiple times, treat each as a separate entry if their timestamps or actions differ.
-        - If the document contains a header, ignore it and only extract the relevant data.
-        - If no data is found, return an empty JSON array.
-        Example:
+        Your task is to act as an attendance sheet processor.
+        From the provided file (which can be a PDF or a text/csv file), do the following:
+        1.  Extract the full name of each participant. The column might be 'Full Name' or 'Nome Completo'.
+        2.  Extract the timestamp of each action. The column might be 'Timestamp'.
+        3.  Extract the action itself. The column might be 'User Action' or 'Action'. The values are typically 'Joined' and 'Left'.
+        4.  Return the data as a clean JSON array of objects. Each object must have three keys: "Full Name", "Timestamp", and "Action".
+        5.  Ensure the 'Timestamp' is in the format 'MM/DD/YYYY, HH:MM:SS AM/PM'.
+        6.  If a participant joins and leaves multiple times, create a separate JSON object for each action.
+        7.  Ignore any header rows or summary information in the file that is not part of the main data table.
+        8.  If no valid data is found, return an empty JSON array.
+
+        Example of the desired output format:
         [
             {"Full Name": "John Doe", "Timestamp": "07/29/2024, 08:00:00 AM", "Action": "Joined"},
             {"Full Name": "John Doe", "Timestamp": "07/29/2024, 08:30:00 AM", "Action": "Left"},
@@ -241,20 +170,18 @@ def processar_arquivo_pdf(uploaded_file, start_time, training_duration, min_pres
         extracted_data = pdf_qa.extract_structured_data(uploaded_file, extraction_prompt)
 
         if not extracted_data:
-            st.sidebar.warning("Nenhum dado de colaborador encontrado no PDF via IA. Verifique o formato do arquivo ou o prompt.")
+            st.sidebar.warning(f"A IA não encontrou dados de colaborador no arquivo '{uploaded_file.name}'. Verifique o formato do arquivo.")
             return
 
         df = pd.DataFrame(extracted_data)
         
         if 'Full Name' in df.columns and 'Timestamp' in df.columns and 'Action' in df.columns:
             df['Timestamp'] = pd.to_datetime(df['Timestamp'], format='%m/%d/%Y, %I:%M:%S %p', errors='coerce')
-            df.dropna(subset=['Timestamp'], inplace=True)
+            df.dropna(subset=['Timestamp'], inplace=True) 
             df = df.sort_values(by=['Full Name', 'Timestamp'])
 
             st.session_state.colaboradores = []
             if not df.empty:
-                training_start_datetime = datetime.combine(df['Timestamp'].iloc[0].date(), start_time)
-
                 for name, group in df.groupby('Full Name'):
                     total_duration = timedelta(0)
                     last_join_time = None
@@ -271,46 +198,67 @@ def processar_arquivo_pdf(uploaded_file, start_time, training_duration, min_pres
                     frequencia_ok = presence_percentage >= min_presence
 
                     st.session_state.colaboradores.append({
-                        'nome': name,
-                        'frequencia': frequencia_ok,
-                        'check_ins_pontuais': 0,
+                        'nome': name, 'frequencia': frequencia_ok, 'check_ins_pontuais': 0,
                     })
-                st.sidebar.success(f"{len(st.session_state.colaboradores)} colaboradores processados do PDF via IA!")
+                st.sidebar.success(f"{len(st.session_state.colaboradores)} colaboradores processados de '{uploaded_file.name}' via IA!")
             else:
-                st.sidebar.warning("Nenhum dado válido de colaborador encontrado no PDF após a filtragem pela IA.")
+                st.sidebar.warning("Nenhum dado válido de colaborador encontrado no arquivo após a filtragem pela IA.")
         else:
-            st.sidebar.error(f"Colunas necessárias não encontradas no JSON extraído pela IA. Esperado: 'Full Name', 'Timestamp', 'Action'. Encontrado: {list(df.columns)}")
+            st.sidebar.error(f"A IA não retornou as colunas esperadas. Esperado: 'Full Name', 'Timestamp', 'Action'. Encontrado: {list(df.columns)}")
 
     except Exception as e:
-        st.sidebar.error(f"Erro ao processar o arquivo PDF com a IA: {e}")
-        st.sidebar.info("O processamento de PDF via IA é experimental e depende da capacidade da IA de interpretar o documento.")
+        st.sidebar.error(f"Erro ao processar o arquivo com a IA: {e}")
+        st.sidebar.info("Este processo depende da capacidade da IA de interpretar o documento.")
 
 def desenhar_formulario_colaboradores(total_oportunidades: int, total_check_ins: int):
     st.header("👤 Dados dos Colaboradores")
     if 'colaboradores' not in st.session_state or not st.session_state.colaboradores:
-        st.info("Adicione colaboradores manualmente ou carregue uma lista de presença.")
+        st.info("Adicione colaboradores manualmente ou carregue uma lista de presença via IA.")
         return
 
-    st.warning("Preencha os dados restantes para cada colaborador.")
+    st.warning("Confira os dados importados e preencha o que falta para cada colaborador.")
 
     for i, colab in enumerate(st.session_state.colaboradores):
         st.markdown(f"---")
-        cols = st.columns([3, 1, 1, 1, 1])
-        
-        colab['nome'] = cols[0].text_input(f"Nome do Colaborador {i+1}", value=colab.get('nome', ''), key=f"nome_{i}")
-        # A linha acima foi ajustada para permitir edição do nome, o que é mais flexível.
-        # Original: cols[0].text_input(..., disabled=True)
-        # st.session_state.colaboradores[i]['nome'] = colab.get('nome', '')
-        st.session_state.colaboradores[i]['nome'] = colab['nome']
+        # Criar uma chave única para o container ou expander, se necessário
+        with st.container():
+            cols = st.columns([3, 1, 1, 1, 1])
+            
+            # Use o nome do colaborador como parte da chave para garantir estabilidade
+            colab_key_prefix = f"{colab.get('nome', '')}_{i}"
 
-        st.session_state.colaboradores[i]['check_ins_pontuais'] = cols[1].number_input("Check-ins Pontuais", min_value=0, max_value=total_check_ins, step=1, key=f"check_ins_{i}", value=colab.get('check_ins_pontuais', 0))
-        st.session_state.colaboradores[i]['interacoes'] = cols[2].number_input("Interações Válidas", min_value=0, max_value=total_oportunidades, step=1, key=f"interacoes_{i}")
-        st.session_state.colaboradores[i]['acertos'] = cols[3].number_input("Acertos na Prova", min_value=0, max_value=10, step=1, key=f"acertos_{i}")
-        
-        # A frequência também deve ser atualizada no session_state para consistência
-        frequencia_atual = colab.get('frequencia', False)
-        st.session_state.colaboradores[i]['frequencia'] = cols[4].checkbox("Frequência OK?", value=frequencia_atual, key=f"frequencia_{i}")
-
+            st.session_state.colaboradores[i]['nome'] = cols[0].text_input(
+                f"Nome do Colaborador {i+1}", 
+                value=colab.get('nome', ''), 
+                key=f"nome_{colab_key_prefix}"
+            )
+            
+            st.session_state.colaboradores[i]['check_ins_pontuais'] = cols[1].number_input(
+                "Check-ins Pontuais", 
+                min_value=0, max_value=total_check_ins, step=1, 
+                key=f"check_ins_{colab_key_prefix}", 
+                value=colab.get('check_ins_pontuais', 0)
+            )
+            
+            st.session_state.colaboradores[i]['interacoes'] = cols[2].number_input(
+                "Interações Válidas", 
+                min_value=0, max_value=total_oportunidades, step=1, 
+                key=f"interacoes_{colab_key_prefix}",
+                value=colab.get('interacoes', 0)
+            )
+            
+            st.session_state.colaboradores[i]['acertos'] = cols[3].number_input(
+                "Acertos na Prova", 
+                min_value=0, max_value=10, step=1, 
+                key=f"acertos_{colab_key_prefix}",
+                value=colab.get('acertos', 0)
+            )
+            
+            st.session_state.colaboradores[i]['frequencia'] = cols[4].checkbox(
+                "Frequência OK?", 
+                value=colab.get('frequencia', False), 
+                key=f"frequencia_{colab_key_prefix}"
+            )
 
 def exibir_resultados(dados_processados: list, training_title: str):
     if not dados_processados:
@@ -353,11 +301,11 @@ def exibir_pdf_qa_interface():
 
     pdf_qa = st.session_state.pdf_qa_instance
 
-    st.header("📚 Perguntas e Respostas sobre PDFs")
-    uploaded_qa_files = st.file_uploader("Envie um ou mais PDFs para fazer perguntas", type=["pdf"], accept_multiple_files=True, key="qa_pdf_uploader")
+    st.header("📚 Perguntas e Respostas sobre Documentos")
+    uploaded_qa_files = st.file_uploader("Envie um ou mais arquivos (PDF, CSV, TXT) para fazer perguntas", type=["pdf", "csv", "txt"], accept_multiple_files=True, key="qa_pdf_uploader")
 
     if uploaded_qa_files:
-        question = st.text_area("Faça sua pergunta sobre os PDFs:", key="pdf_question")
+        question = st.text_area("Faça sua pergunta sobre os documentos:", key="pdf_question")
         if st.button("Obter Resposta", key="ask_pdf_button"):
             if question:
                 with st.spinner("Buscando resposta..."):
@@ -369,9 +317,9 @@ def exibir_pdf_qa_interface():
             else:
                 st.warning("Por favor, digite uma pergunta.")
 
-    st.header("📊 Extração de Dados Estruturados de PDF")
-    st.info("Esta função extrai dados específicos de um ÚNICO PDF e os retorna em formato JSON.")
-    uploaded_extraction_file = st.file_uploader("Envie um ÚNICO PDF para extração de dados", type=["pdf"], key="extraction_pdf_uploader")
+    st.header("📊 Extração de Dados Estruturados de um Arquivo")
+    st.info("Esta função extrai dados específicos de um ÚNICO arquivo (PDF, CSV, etc.) e os retorna em formato JSON.")
+    uploaded_extraction_file = st.file_uploader("Envie um ÚNICO arquivo para extração de dados", type=["pdf", "csv", "txt"], key="extraction_pdf_uploader")
 
     if uploaded_extraction_file:
         extraction_prompt = st.text_area(
