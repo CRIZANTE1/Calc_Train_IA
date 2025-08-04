@@ -5,6 +5,7 @@ from datetime import datetime, time, timedelta
 # Importações dos pacotes do projeto
 from IA.pdf_qa import PDFQA
 from utils.pdf_generator import generate_pdf_report
+from auth import auth_utils 
 
 # --- Funções de Interface do Streamlit ---
 
@@ -189,3 +190,41 @@ def exibir_botao_pdf(dados_processados: list, training_title: str):
         file_name=f"relatorio_{training_title.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf",
         mime="application/pdf",
     )
+
+
+
+def exibir_pagina_admin():
+    """Desenha a interface da página de administração."""
+    
+    # Protege a página inteira. A função check_admin_permission já exibe o erro e para a execução.
+    auth_utils.check_admin_permission()
+    
+    st.header("⚙️ Painel de Administração")
+    st.info("Esta área é restrita para administradores do sistema.")
+    
+    tab1, tab2 = st.tabs(["Gerenciar Usuários", "Outras Configurações"])
+    
+    with tab1:
+        st.subheader("Usuários Autorizados")
+        st.markdown("""
+        A lista abaixo é carregada diretamente do arquivo de segredos (`secrets.toml`) da aplicação. 
+        Para adicionar, remover ou alterar permissões, você deve editar este arquivo e reiniciar a aplicação.
+        """)
+        
+        try:
+            users_df = auth_utils.get_users_for_display()
+            st.dataframe(users_df, use_container_width=True)
+        except Exception as e:
+            st.error(f"Não foi possível carregar a lista de usuários: {e}")
+
+    with tab2:
+        st.subheader("Configurações Futuras")
+        st.write("Esta área pode ser usada para outras configurações do sistema, como:")
+        st.markdown("""
+        - Limpar o cache da aplicação.
+        - Visualizar logs de erros.
+        - Gerenciar parâmetros globais.
+        """)
+        if st.button("Limpar Cache de Dados"):
+            st.cache_data.clear()
+            st.success("O cache de dados foi limpo com sucesso!")
