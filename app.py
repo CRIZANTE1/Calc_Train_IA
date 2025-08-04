@@ -1,6 +1,6 @@
 import streamlit as st
-from end import calculos
-from front import interface
+import calculos 
+import interface
 
 def main():
     """Função principal que executa a aplicação Streamlit."""
@@ -11,6 +11,7 @@ def main():
     page = st.sidebar.radio("Navegação", ["Calculadora de Treinamento", "IA de PDF"])
 
     if page == "Calculadora de Treinamento":
+        # MELHORIA: A inicialização do session_state é feita aqui, de forma centralizada.
         if 'colaboradores' not in st.session_state:
             st.session_state.colaboradores = []
 
@@ -37,6 +38,9 @@ def main():
 
     elif page == "IA de PDF":
         interface.exibir_pdf_qa_interface()        
+
+if __name__ == "__main__":
+    main()  
 
 if __name__ == "__main__":
     main()
