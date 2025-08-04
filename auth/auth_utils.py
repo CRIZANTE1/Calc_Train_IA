@@ -1,12 +1,13 @@
+
 import streamlit as st
 
 @st.cache_data(ttl=300) # Cache por 5 minutos
 def get_authorized_users() -> list:
     """Carrega a lista de usuários autorizados do st.secrets."""
     try:
-        # Garante que a lista de credenciais exista
         if "users" in st.secrets and "credentials" in st.secrets.users:
-            return st.secrets.users.credentials
+            return list(st.secrets.users.credentials)
+            
         return []
     except Exception:
         # Retorna lista vazia se a estrutura de segredos estiver incorreta
