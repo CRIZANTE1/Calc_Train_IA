@@ -5,7 +5,7 @@ import io
 import csv
 import requests
 
-from pdf_qa import PDFQA
+from IA.pdf_qa import PDFQA
 import base64
 from weasyprint import HTML
 from datetime import datetime, time, timedelta
