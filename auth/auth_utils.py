@@ -1,5 +1,7 @@
 
 import streamlit as st
+import pandas as pd
+
 
 @st.cache_data(ttl=300) # Cache por 5 minutos
 def get_authorized_users() -> list:
