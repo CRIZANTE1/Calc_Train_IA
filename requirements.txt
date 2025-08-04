@@ -3,3 +3,4 @@ pandas
 weasyprint
 requests
 google-generativeai
+Authlib
