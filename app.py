@@ -8,36 +8,53 @@ def main():
     
     interface.configurar_pagina()
 
+    # --- FLUXO DE LOGIN ---
     if not show_login_page():
         st.stop()
     
     show_user_header()
     show_logout_button()
-
-    if 'colaboradores' not in st.session_state:
-        st.session_state.colaboradores = []
-    if 'dados_processados' not in st.session_state:
-        st.session_state.dados_processados = None
-
-    interface.exibir_cabecalho()
     
-    training_title, total_oportunidades, total_check_ins = interface.configurar_barra_lateral()
+    # --- NAVEGAÇÃO ENTRE PÁGINAS ---
+    st.sidebar.markdown("---")
+    page = st.sidebar.radio(
+        "Navegação",
+        ["Calculadora de Treinamento", "Administração"],
+        key="page_selector"
+    )
     
-    interface.desenhar_formulario_colaboradores(total_oportunidades, total_check_ins)
+    # --- ROTEAMENTO DAS PÁGINAS ---
+    if page == "Calculadora de Treinamento":
+        # Lógica da página principal
+        if 'colaboradores' not in st.session_state:
+            st.session_state.colaboradores = []
+        if 'dados_processados' not in st.session_state:
+            st.session_state.dados_processados = None
 
-    if st.session_state.colaboradores:
-        if st.button("📊 Calcular Resultados Finais", type="primary"):
-            st.session_state.dados_processados = calculos.processar_dados_colaboradores(
-                st.session_state.colaboradores, 
-                total_oportunidades,
-                total_check_ins
-            )
+        interface.exibir_cabecalho()
+        
+        training_title, total_oportunidades, total_check_ins = interface.configurar_barra_lateral()
+        
+        interface.desenhar_formulario_colaboradores(total_oportunidades, total_check_ins)
 
-    if st.session_state.dados_processados is not None:
-        interface.exibir_tabela_resultados(st.session_state.dados_processados)
-        interface.exibir_botao_pdf(st.session_state.dados_processados, training_title)
-            
-    st.caption('Desenvolvido por Cristian Ferreira Carlos, CE9X,+551131038708, cristiancarlos@vibraenergia.com.br')        
+        if st.session_state.colaboradores:
+            if st.button("📊 Calcular Resultados Finais", type="primary"):
+                st.session_state.dados_processados = calculos.processar_dados_colaboradores(
+                    st.session_state.colaboradores, 
+                    total_oportunidades,
+                    total_check_ins
+                )
+
+        if st.session_state.dados_processados is not None:
+            interface.exibir_tabela_resultados(st.session_state.dados_processados)
+            interface.exibir_botao_pdf(st.session_state.dados_processados, training_title)
+    
+    elif page == "Administração":
+        # Chama a função que desenha a página de admin
+        interface.exibir_pagina_admin()
+
+    st.sidebar.markdown("---")
+    st.sidebar.caption(f'Desenvolvido por Cristian Ferreira Carlos\nCE9X,+551131038708\ncristiancarlos@vibraenergia.com.br')
 
 if __name__ == "__main__":
     main()
