@@ -7,31 +7,34 @@ def main():
     
     interface.configurar_pagina()
 
-    page = st.sidebar.radio("Navegação", ["Calculadora de Treinamento", "IA de PDF"])
 
-    if page == "Calculadora de Treinamento":
-        if 'colaboradores' not in st.session_state:
-            st.session_state.colaboradores = []
+    # Inicializa o session_state se necessário
+    if 'colaboradores' not in st.session_state:
+        st.session_state.colaboradores = []
 
-        interface.exibir_cabecalho()
-        
-        training_title, total_oportunidades, total_check_ins = interface.configurar_barra_lateral()
-        
-        interface.desenhar_formulario_colaboradores(total_oportunidades, total_check_ins)
+    # Exibe o cabeçalho padrão da página
+    interface.exibir_cabecalho()
+    
+    # A barra lateral configura os parâmetros do treinamento
+    training_title, total_oportunidades, total_check_ins = interface.configurar_barra_lateral()
+    
+    # O formulário principal para inserir dados dos colaboradores
+    interface.desenhar_formulario_colaboradores(total_oportunidades, total_check_ins)
 
-        if st.session_state.colaboradores:
-            if st.button("📊 Calcular Resultados Finais", type="primary"):
-                dados_processados = calculos.processar_dados_colaboradores(
-                    st.session_state.colaboradores, 
-                    total_oportunidades,
-                    total_check_ins
-                )
-                interface.exibir_resultados(dados_processados, training_title)
-                
-        st.caption('Desenvolvido por Cristian Ferreira Carlos, CE9X,+551131038708, cristiancarlos@vibraenergia.com.br')        
-
-    elif page == "IA de PDF":
-        interface.exibir_pdf_qa_interface()        
+    # Se houver colaboradores na lista, exibe o botão de cálculo
+    if st.session_state.colaboradores:
+        if st.button("📊 Calcular Resultados Finais", type="primary"):
+            # Processa os dados inseridos
+            dados_processados = calculos.processar_dados_colaboradores(
+                st.session_state.colaboradores, 
+                total_oportunidades,
+                total_check_ins
+            )
+            # Exibe os resultados e o botão de download do PDF
+            interface.exibir_resultados(dados_processados, training_title)
+            
+    st.caption('Desenvolvido por Cristian Ferreira Carlos, CE9X,+551131038708, cristiancarlos@vibraenergia.com.br')        
 
 if __name__ == "__main__":
     main()
+
