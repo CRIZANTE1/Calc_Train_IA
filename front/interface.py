@@ -138,7 +138,14 @@ def configurar_barra_lateral():
 
 def processar_arquivo_csv(uploaded_file, start_time, training_duration, min_presence):
     try:
-        df = pd.read_csv(uploaded_file, encoding='utf-16', sep='\t')
+        # Faz a leitura inicial para detectar o separador
+        content_as_string = uploaded_file.getvalue().decode('utf-16')
+        sniffer = csv.Sniffer()
+        dialect = sniffer.sniff(content_as_string.splitlines()[0])
+        uploaded_file.seek(0) # Volta ao início do arquivo
+
+        df = pd.read_csv(uploaded_file, encoding='utf-16', sep=dialect.delimiter)
+        
         if 'Full Name' in df.columns and 'Timestamp' in df.columns and 'Action' in df.columns:
             df['Timestamp'] = pd.to_datetime(df['Timestamp'], format='%m/%d/%Y, %I:%M:%S %p')
             df = df.sort_values(by=['Full Name', 'Timestamp'])
