@@ -4,8 +4,7 @@ from end.calculos import processar_dados_colaboradores
 import io
 import csv
 import requests
-import PyPDF2
-import re
+
 from IA.pdf_qa import PDFQA
 import base64
 from weasyprint import HTML
@@ -221,48 +220,37 @@ def processar_arquivo_csv(uploaded_file, start_time, training_duration, min_pres
 
 def processar_arquivo_pdf(uploaded_file, start_time, training_duration, min_presence):
     try:
-        reader = PyPDF2.PdfReader(uploaded_file)
-        text = ""
-        for page in reader.pages:
-            text += page.extract_text() + "\n"
+        if 'pdf_qa_instance' not in st.session_state:
+            st.session_state.pdf_qa_instance = PDFQA()
+        pdf_qa = st.session_state.pdf_qa_instance
 
-        # For simplicity, let's assume the PDF text has lines similar to CSV
-        # We will try to parse lines that contain "Joined" or "Left" and a timestamp
-        lines = text.splitlines()
-        
-        # This part will be highly dependent on the PDF structure.
-        # For a robust solution, you might need more advanced NLP or regex.
-        # Here, we'll try to mimic the CSV parsing logic as much as possible.
-        
-        data_rows = []
-        # Regex to find patterns like "Name Timestamp Action"
-        # This regex is an attempt to be flexible, but might need adjustment based on actual PDF content
-        # It looks for:
-        # 1. Anything at the beginning (non-greedy) as the name
-        # 2. A timestamp pattern (MM/DD/YYYY, HH:MM:SS AM/PM)
-        # 3. Either "Joined" or "Left" as the action
-        pattern = re.compile(r"^(.*?)\s*(\d{1,2}/\d{1,2}/\d{4},\s*\d{1,2}:\d{2}:\d{2}\s*[AP]M)\s*(Joined|Left)$")
+        # Prompt para a IA extrair os dados da lista de presença
+        extraction_prompt = """
+        Do the following:
+        - Extract the full name of each participant.
+        - Extract the timestamp of each action (Joined/Left).
+        - Extract the action (Joined or Left).
+        - Return the data as a JSON array of objects, where each object has 'Full Name', 'Timestamp', and 'Action' keys.
+        - Ensure the 'Timestamp' is in 'MM/DD/YYYY, HH:MM:SS AM/PM' format.
+        - If a participant joins and leaves multiple times, include all their entries.
+        - If a participant's name appears multiple times, treat each as a separate entry if their timestamps or actions differ.
+        - If the document contains a header, ignore it and only extract the relevant data.
+        - If no data is found, return an empty JSON array.
+        Example:
+        [
+            {"Full Name": "John Doe", "Timestamp": "07/29/2024, 08:00:00 AM", "Action": "Joined"},
+            {"Full Name": "John Doe", "Timestamp": "07/29/2024, 08:30:00 AM", "Action": "Left"},
+            {"Full Name": "Jane Smith", "Timestamp": "07/29/2024, 08:05:00 AM", "Action": "Joined"}
+        ]
+        """
 
-        for line in lines:
-            match = pattern.match(line)
-            if match:
-                try:
-                    name = match.group(1).strip()
-                    timestamp_str = match.group(2).strip()
-                    action = match.group(3).strip()
-                    data_rows.append([name, timestamp_str, action])
-                except Exception as e:
-                    st.warning(f"Could not parse line from PDF using regex: {line} - {e}")
-            else:
-                # Fallback for lines that might contain the keywords but don't match the full pattern
-                if "Joined" in line or "Left" in line:
-                    st.info(f"Line contains keywords but did not match full regex pattern: {line}")
+        extracted_data = pdf_qa.extract_structured_data(uploaded_file, extraction_prompt)
 
-        if not data_rows:
-            st.sidebar.warning("Nenhum dado de colaborador encontrado no PDF. Verifique o formato do arquivo.")
+        if not extracted_data:
+            st.sidebar.warning("Nenhum dado de colaborador encontrado no PDF via IA. Verifique o formato do arquivo ou o prompt.")
             return
 
-        df = pd.DataFrame(data_rows, columns=['Full Name', 'Timestamp', 'Action'])
+        df = pd.DataFrame(extracted_data)
         
         # Continue with the same processing logic as CSV
         if 'Full Name' in df.columns and 'Timestamp' in df.columns and 'Action' in df.columns:
@@ -294,15 +282,15 @@ def processar_arquivo_pdf(uploaded_file, start_time, training_duration, min_pres
                         'frequencia': frequencia_ok,
                         'check_ins_pontuais': 0,
                     })
-                st.sidebar.success(f"{len(st.session_state.colaboradores)} colaboradores processados do PDF!")
+                st.sidebar.success(f"{len(st.session_state.colaboradores)} colaboradores processados do PDF via IA!")
             else:
-                st.sidebar.warning("Nenhum dado válido de colaborador encontrado no PDF após a filtragem.")
+                st.sidebar.warning("Nenhum dado válido de colaborador encontrado no PDF após a filtragem pela IA.")
         else:
-            st.sidebar.error(f"Colunas necessárias não encontradas no PDF. Esperado: 'Full Name', 'Timestamp', 'Action'. Encontrado: {list(df.columns)}")
+            st.sidebar.error(f"Colunas necessárias não encontradas no JSON extraído pela IA. Esperado: 'Full Name', 'Timestamp', 'Action'. Encontrado: {list(df.columns)}")
 
     except Exception as e:
-        st.sidebar.error(f"Erro ao processar o arquivo PDF: {e}")
-        st.sidebar.info("O processamento de PDF é experimental e pode exigir um formato específico.")
+        st.sidebar.error(f"Erro ao processar o arquivo PDF com a IA: {e}")
+        st.sidebar.info("O processamento de PDF via IA é experimental e depende da capacidade da IA de interpretar o documento.")
 
 def desenhar_formulario_colaboradores(total_oportunidades: int, total_check_ins: int):
     st.header("👤 Dados dos Colaboradores")
