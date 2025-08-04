@@ -24,8 +24,6 @@ class PDFQA:
             
             inputs.append({"text": question})
             
-            # CORREÇÃO: Usa o limiter para fazer a chamada à API de forma segura.
-            # Estima os tokens do prompt. Para uma precisão maior, use model.count_tokens().
             prompt_tokens_estimate = len(question) // 4 
 
             response = self.limiter.call_api(
@@ -59,7 +57,6 @@ class PDFQA:
                 part_pdf = {"mime_type": "application/pdf", "data": pdf_bytes}
                 generation_config = genai.types.GenerationConfig(response_mime_type="application/json")
 
-                # CORREÇÃO: Usa o limiter para fazer a chamada à API de forma segura.
                 prompt_tokens_estimate = len(prompt) // 4
                 
                 response = self.limiter.call_api(
