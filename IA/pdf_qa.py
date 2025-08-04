@@ -1,6 +1,6 @@
 import google.generativeai as genai
 from google.generativeai.types import content_types
-from AI.api_load import load_api
+from .api_load import load_api
 import time
 import numpy as np
 import streamlit as st
