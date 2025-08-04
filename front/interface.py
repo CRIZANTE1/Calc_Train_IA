@@ -175,10 +175,11 @@ def exibir_botao_pdf(dados_processados: list, training_title: str):
     st.markdown("---")
     
     df_resultados = pd.DataFrame(dados_processados)
-    logo_url = "https://www.vibraenergia.com.br/wp-content/themes/vibra/static/images/logo-vibra.svg"
     
-    # Prepara os dados para o botão de download, que é uma operação rápida.
-    # O spinner pode ser usado se a geração do PDF for demorada.
+    # CORREÇÃO: Usando a URL de download direto do Google Drive para a logo.
+    logo_url = "https://drive.google.com/uc?export=download&id=1AABdw4iGBJ7tsQ7fR1WGTP5cML3Jlfx_"
+    
+    # O resto da função permanece o mesmo.
     with st.spinner("Preparando dados do relatório..."):
         pdf_data = generate_pdf_report(df_resultados, logo_url, training_title)
     
