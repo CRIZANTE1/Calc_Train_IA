@@ -6,6 +6,7 @@ import csv
 import requests
 import PyPDF2
 import re
+from IA.pdf_qa import PDFQA
 import base64
 from weasyprint import HTML
 from datetime import datetime, time, timedelta
@@ -303,7 +304,6 @@ def processar_arquivo_pdf(uploaded_file, start_time, training_duration, min_pres
         st.sidebar.error(f"Erro ao processar o arquivo PDF: {e}")
         st.sidebar.info("O processamento de PDF é experimental e pode exigir um formato específico.")
 
-
 def desenhar_formulario_colaboradores(total_oportunidades: int, total_check_ins: int):
     st.header("👤 Dados dos Colaboradores")
     if 'colaboradores' not in st.session_state or not st.session_state.colaboradores:
@@ -357,3 +357,48 @@ def exibir_resultados(dados_processados: list, training_title: str):
         file_name=f"relatorio_{training_title.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf",
         mime="application/pdf",
     )
+
+def exibir_pdf_qa_interface():
+    st.title("🤖 IA de PDF")
+    st.markdown("Faça perguntas sobre seus documentos PDF ou extraia dados estruturados.")
+
+    if 'pdf_qa_instance' not in st.session_state:
+        st.session_state.pdf_qa_instance = PDFQA()
+
+    pdf_qa = st.session_state.pdf_qa_instance
+
+    # --- Upload de PDFs para QA ---
+    st.header("📚 Perguntas e Respostas sobre PDFs")
+    uploaded_qa_files = st.file_uploader("Envie um ou mais PDFs para fazer perguntas", type=["pdf"], accept_multiple_files=True, key="qa_pdf_uploader")
+
+    if uploaded_qa_files:
+        question = st.text_area("Faça sua pergunta sobre os PDFs:", key="pdf_question")
+        if st.button("Obter Resposta", key="ask_pdf_button"):
+            if question:
+                with st.spinner("Buscando resposta..."):
+                    answer, duration = pdf_qa.answer_question(uploaded_qa_files, question)
+                    if answer:
+                        st.subheader("Resposta:")
+                        st.write(answer)
+                        st.info(f"Tempo de resposta: {duration:.2f} segundos")
+            else:
+                st.warning("Por favor, digite uma pergunta.")
+
+    # --- Extração de Dados Estruturados ---
+    st.header("📊 Extração de Dados Estruturados de PDF")
+    st.info("Esta função extrai dados específicos de um ÚNICO PDF e os retorna em formato JSON.")
+    uploaded_extraction_file = st.file_uploader("Envie um ÚNICO PDF para extração de dados", type=["pdf"], key="extraction_pdf_uploader")
+
+    if uploaded_extraction_file:
+        extraction_prompt = st.text_area(
+            "Descreva os dados que você quer extrair (ex: 'Extraia o nome do cliente, o número da fatura e o valor total como JSON.').",
+            key="extraction_prompt"
+        )
+        if st.button("Extrair Dados", key="extract_data_button"):
+            if extraction_prompt:
+                extracted_data = pdf_qa.extract_structured_data(uploaded_extraction_file, extraction_prompt)
+                if extracted_data:
+                    st.subheader("Dados Extraídos (JSON):")
+                    st.json(extracted_data)
+            else:
+                st.warning("Por favor, forneça um prompt para a extração de dados.")
