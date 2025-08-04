@@ -5,6 +5,7 @@ import io
 import csv
 import requests
 import PyPDF2
+import re
 import base64
 from weasyprint import HTML
 from datetime import datetime, time, timedelta
@@ -233,22 +234,28 @@ def processar_arquivo_pdf(uploaded_file, start_time, training_duration, min_pres
         # Here, we'll try to mimic the CSV parsing logic as much as possible.
         
         data_rows = []
+        # Regex to find patterns like "Name Timestamp Action"
+        # This regex is an attempt to be flexible, but might need adjustment based on actual PDF content
+        # It looks for:
+        # 1. Anything at the beginning (non-greedy) as the name
+        # 2. A timestamp pattern (MM/DD/YYYY, HH:MM:SS AM/PM)
+        # 3. Either "Joined" or "Left" as the action
+        pattern = re.compile(r"^(.*?)\s*(\d{1,2}/\d{1,2}/\d{4},\s*\d{1,2}:\d{2}:\d{2}\s*[AP]M)\s*(Joined|Left)$")
+
         for line in lines:
-            # Example: "Full Name,Timestamp,Action"
-            # We need to find lines that contain these patterns
-            if "Joined" in line or "Left" in line:
-                # Attempt to extract name, timestamp, and action
-                # This is a very basic and likely fragile parsing.
-                # A real-world solution would need more sophisticated parsing.
-                parts = line.split(',')
-                if len(parts) >= 3:
-                    try:
-                        name = parts[0].strip()
-                        timestamp_str = parts[1].strip()
-                        action = parts[2].strip()
-                        data_rows.append([name, timestamp_str, action])
-                    except Exception as e:
-                        st.warning(f"Could not parse line from PDF: {line} - {e}")
+            match = pattern.match(line)
+            if match:
+                try:
+                    name = match.group(1).strip()
+                    timestamp_str = match.group(2).strip()
+                    action = match.group(3).strip()
+                    data_rows.append([name, timestamp_str, action])
+                except Exception as e:
+                    st.warning(f"Could not parse line from PDF using regex: {line} - {e}")
+            else:
+                # Fallback for lines that might contain the keywords but don't match the full pattern
+                if "Joined" in line or "Left" in line:
+                    st.info(f"Line contains keywords but did not match full regex pattern: {line}")
 
         if not data_rows:
             st.sidebar.warning("Nenhum dado de colaborador encontrado no PDF. Verifique o formato do arquivo.")
