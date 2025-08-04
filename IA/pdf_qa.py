@@ -1,5 +1,3 @@
-# --- START OF FILE pdf_qa.py ---
-
 import google.generativeai as genai
 from api_load import load_api
 from AI_operations import RateLimiter
