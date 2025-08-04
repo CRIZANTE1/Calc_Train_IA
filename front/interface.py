@@ -139,27 +139,43 @@ def configurar_barra_lateral():
 
 def processar_arquivo_csv(uploaded_file, start_time, training_duration, min_presence):
     try:
-        # Faz a leitura inicial para detectar o separador
         content_as_string = uploaded_file.getvalue().decode('utf-16')
-        sniffer = csv.Sniffer()
-        dialect = sniffer.sniff(content_as_string.splitlines()[0])
-        uploaded_file.seek(0) # Volta ao início do arquivo
+        lines = content_as_string.splitlines()
 
-        df = pd.read_csv(uploaded_file, encoding='utf-16', sep=dialect.delimiter)
+        header_row_index = -1
+        # Itera pelas linhas para encontrar o cabeçalho real
+        for i, line in enumerate(lines):
+            # Critérios para identificar a linha de cabeçalho
+            if 'Full Name' in line or 'Nome Completo' in line or 'Timestamp' in line or 'User Action' in line:
+                header_row_index = i
+                break
         
-        # Normaliza os nomes das colunas (remove espaços em branco)
+        if header_row_index == -1:
+            st.sidebar.error("Cabeçalho do CSV não encontrado. Verifique o arquivo.")
+            return
+
+        # Use o conteúdo do CSV a partir da linha de cabeçalho
+        csv_content_from_header = "\n".join(lines[header_row_index:])
+        csv_file_like_object = io.StringIO(csv_content_from_header)
+
+        # Detecta o dialeto e lê o CSV
+        sniffer = csv.Sniffer()
+        dialect = sniffer.sniff(lines[header_row_index])
+        df = pd.read_csv(csv_file_like_object, sep=dialect.delimiter)
+
+        # O resto do processamento continua aqui...
         df.columns = df.columns.str.strip()
 
-        # Mapeamento de possíveis nomes de colunas para os nomes esperados
         column_mapping = {
             'Nome Completo': 'Full Name',
-            'Full Name': 'Full Name',
             'Timestamp': 'Timestamp',
             'User Action': 'Action',
             'Action': 'Action'
         }
+        # Remove 'Full Name' do mapeamento se já existir para evitar problemas
+        if 'Full Name' in df.columns:
+            column_mapping.pop('Full Name', None)
 
-        # Renomeia as colunas com base no mapeamento
         df.rename(columns=column_mapping, inplace=True)
 
         if 'Full Name' in df.columns and 'Timestamp' in df.columns and 'Action' in df.columns:
@@ -179,6 +195,7 @@ def processar_arquivo_csv(uploaded_file, start_time, training_duration, min_pres
                         total_duration += row['Timestamp'] - last_join_time
                         last_join_time = None
                 if last_join_time is not None:
+                    # Se a pessoa entrou e não saiu, considera que ficou até o final da gravação
                     total_duration += df['Timestamp'].max() - last_join_time
 
                 presence_percentage = (total_duration.total_seconds() / (training_duration * 60)) * 100
@@ -187,11 +204,12 @@ def processar_arquivo_csv(uploaded_file, start_time, training_duration, min_pres
                 st.session_state.colaboradores.append({
                     'nome': name,
                     'frequencia': frequencia_ok,
-                    'check_ins_pontuais': 0, # Valor padrão para o instrutor preencher
+                    'check_ins_pontuais': 0,
                 })
             st.sidebar.success(f"{len(st.session_state.colaboradores)} colaboradores processados!")
         else:
-            st.sidebar.error("Arquivo CSV inválido. Verifique as colunas 'Full Name', 'Timestamp' e 'Action'.")
+            st.sidebar.error(f"Colunas necessárias não encontradas. Esperado: 'Full Name', 'Timestamp', 'Action'. Encontrado: {list(df.columns)}")
+
     except Exception as e:
         st.sidebar.error(f"Erro ao processar o arquivo: {e}")
 
