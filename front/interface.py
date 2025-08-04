@@ -147,6 +147,21 @@ def processar_arquivo_csv(uploaded_file, start_time, training_duration, min_pres
 
         df = pd.read_csv(uploaded_file, encoding='utf-16', sep=dialect.delimiter)
         
+        # Normaliza os nomes das colunas (remove espaços em branco)
+        df.columns = df.columns.str.strip()
+
+        # Mapeamento de possíveis nomes de colunas para os nomes esperados
+        column_mapping = {
+            'Nome Completo': 'Full Name',
+            'Full Name': 'Full Name',
+            'Timestamp': 'Timestamp',
+            'User Action': 'Action',
+            'Action': 'Action'
+        }
+
+        # Renomeia as colunas com base no mapeamento
+        df.rename(columns=column_mapping, inplace=True)
+
         if 'Full Name' in df.columns and 'Timestamp' in df.columns and 'Action' in df.columns:
             df['Timestamp'] = pd.to_datetime(df['Timestamp'], format='%m/%d/%Y, %I:%M:%S %p')
             df = df.sort_values(by=['Full Name', 'Timestamp'])
