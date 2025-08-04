@@ -44,24 +44,28 @@ class PDFQA:
             return match.group(1)
         return text.strip()
 
-    def extract_structured_data(self, pdf_file, prompt):
-        if not pdf_file:
-            st.warning("Nenhum arquivo PDF fornecido para extração.")
+    def extract_structured_data(self, uploaded_file, prompt):
+        """
+        Extrai dados estruturados de um arquivo (PDF, CSV, etc.) usando a IA.
+        """
+        if not uploaded_file:
+            st.warning("Nenhum arquivo fornecido para extração.")
             return None
 
         try:
-            with st.spinner(f"Analisando '{pdf_file.name}' com IA para extrair dados..."):
-                pdf_file.seek(0)
-                pdf_bytes = pdf_file.read()
+            with st.spinner(f"Analisando '{uploaded_file.name}' com IA para extrair dados..."):
+                file_bytes = uploaded_file.getvalue()
+                mime_type = uploaded_file.type
 
-                part_pdf = {"mime_type": "application/pdf", "data": pdf_bytes}
+                file_part = {"mime_type": mime_type, "data": file_bytes}
+                
                 generation_config = genai.types.GenerationConfig(response_mime_type="application/json")
 
                 prompt_tokens_estimate = len(prompt) // 4
                 
                 response = self.limiter.call_api(
                     self.model.generate_content,
-                    [prompt, part_pdf],
+                    [prompt, file_part],
                     generation_config=generation_config,
                     prompt_tokens=prompt_tokens_estimate
                 )
@@ -69,20 +73,20 @@ class PDFQA:
                 cleaned_response = self._clean_json_string(response.text)
                 extracted_data = json.loads(cleaned_response)
                 
-                st.success(f"Dados extraídos com sucesso de '{pdf_file.name}'!")
+                st.success(f"Dados extraídos com sucesso de '{uploaded_file.name}'!")
                 return extracted_data
                 
         except json.JSONDecodeError:
-            st.error("Erro na extração: A IA não retornou um JSON válido.")
-            # Tentativa de obter o texto da resposta para depuração
+            st.error("Erro na extração: A IA não retornou um JSON válido. Verifique o documento ou o prompt.")
             try:
                 st.text_area("Resposta recebida da IA (para depuração):", value=response.text, height=150)
             except NameError:
-                st.text("Não foi possível obter a resposta da IA.")
+                pass
             return None
         except Exception as e:
-            st.error(f"Ocorreu um erro ao processar o PDF com a IA: {e}")
+            st.error(f"Ocorreu um erro ao processar o arquivo com a IA: {e}")
             return None
+            
 
     def answer_question(self, pdf_files, question):
         start_time = time.time()
