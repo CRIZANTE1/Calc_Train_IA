@@ -65,3 +65,23 @@ def check_admin_permission():
     if not is_admin():
         st.error("Acesso Negado. Você não tem permissão de administrador para realizar esta ação.")
         st.stop()
+
+def get_users_for_display() -> pd.DataFrame:
+    """
+    Prepara um DataFrame com os usuários autorizados para exibição na página de admin.
+    """
+    authorized_users = get_authorized_users()
+    if not authorized_users:
+        return pd.DataFrame(columns=["Nome", "E-mail", "Função"])
+    
+    # Prepara os dados para o DataFrame
+    display_data = []
+    for user in authorized_users:
+        display_data.append({
+            "Nome": user.get("name", "N/A"),
+            "E-mail": user.get("email", "N/A"),
+            "Função": user.get("role", "user").capitalize() # ex: "Admin", "User"
+        })
+        
+    df = pd.DataFrame(display_data)
+    return df
