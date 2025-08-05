@@ -1,9 +1,7 @@
-# --- START OF FILE front/interface.py ---
-
 import streamlit as st
 import pandas as pd
 from datetime import datetime, time, timedelta
-import time as py_time # Importa o módulo time com um alias para evitar conflitos
+import time as py_time 
 
 # Importações dos pacotes do projeto
 from IA.pdf_qa import PDFQA
