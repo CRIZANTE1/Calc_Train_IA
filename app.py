@@ -1,19 +1,18 @@
 import streamlit as st
-import sys
-import os
 
-
-project_root = os.path.dirname(os.path.abspath(__file__))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
-
+# Importações de outros módulos
 from utils.google_sheets_handler import GoogleSheetsHandler
 from IA.ai_operations import AIOperations
 from about import show_about_page
-from auth.login_page import show_login_page, show_logout_button
-from auth.auth_utils import get_user_display_name, get_user_email
 from pages import calculator_page
+
+# Importa TODAS as funções de autenticação e UI do novo arquivo consolidado
+from auth.login_ui import (
+    show_login_page,
+    show_user_header,
+    show_logout_button,
+    get_user_email
+)
 
 st.set_page_config(page_title="Cálculo de Brigadistas", page_icon="🔥", layout="wide")
 
@@ -28,11 +27,13 @@ def main():
     """
     Função principal que orquestra o aplicativo.
     """
+    # A função show_login_page agora controla todo o acesso.
     if not show_login_page():
         return
 
+    # Se o fluxo continuar, o usuário está autorizado.
+    show_user_header()
     show_logout_button()
-    st.sidebar.success(f"Bem-vindo, {get_user_display_name()}!")
 
     handler, ai_operator = initialize_services()
 
