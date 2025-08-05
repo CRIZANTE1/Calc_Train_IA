@@ -1,3 +1,5 @@
+# --- START OF FILE front/interface.py ---
+
 import streamlit as st
 import pandas as pd
 from datetime import datetime, time, timedelta
@@ -16,7 +18,7 @@ def configurar_pagina():
 
 def exibir_cabecalho():
     """Exibe o logo e o título principal da aplicação."""
-    st.image("https://tiinside.com.br/wp-content/uploads/2023/02/Vibra-logo.png", width=200)
+    st.image("https://www.movenews.com.br/wp-content/uploads/2022/11/handler.png", width=200)
     st.title("Calculadora de Notas de Treinamento")
     st.markdown("Ferramenta para calcular a nota final dos colaboradores com base nos critérios da Instrução de Trabalho `040.010.060.0999.IT`.")
 
@@ -47,7 +49,8 @@ def configurar_barra_lateral():
         st.sidebar.button("2. Processar Arquivo com IA", disabled=True)
     elif uploaded_file is not None:
         if st.sidebar.button("2. Processar Arquivo com IA"):
-            processar_arquivo_com_ia(uploaded_file, start_time, training_duration, min_presence)
+            # Passando os valores padrão para a função de processamento
+            processar_arquivo_com_ia(uploaded_file, start_time, training_duration, min_presence, total_check_ins, total_oportunidades)
             st.session_state.dados_processados = None
     else:
         st.sidebar.button("2. Processar Arquivo com IA", disabled=True)
@@ -56,13 +59,20 @@ def configurar_barra_lateral():
     if st.sidebar.button("➕ Adicionar Colaborador Manualmente"):
         if 'colaboradores' not in st.session_state:
             st.session_state.colaboradores = []
-        st.session_state.colaboradores.append({})
+        
+        # Cria o dicionário já com os valores padrão
+        novo_colaborador = {
+            'check_ins_pontuais': total_check_ins,
+            'interacoes': total_oportunidades,
+            'acertos': 7
+        }
+        st.session_state.colaboradores.append(novo_colaborador)
         st.session_state.dados_processados = None
     
     return training_title, total_oportunidades, total_check_ins
 
-def processar_arquivo_com_ia(uploaded_file, start_time, training_duration, min_presence):
-    """Processa um arquivo (PDF ou CSV) usando a IA e registra o tempo da chamada."""
+def processar_arquivo_com_ia(uploaded_file, start_time, training_duration, min_presence, total_check_ins, total_oportunidades):
+    """Processa um arquivo (PDF ou CSV) e preenche os colaboradores com valores padrão."""
     try:
         if 'pdf_qa_instance' not in st.session_state:
             st.session_state.pdf_qa_instance = PDFQA()
@@ -79,13 +89,6 @@ def processar_arquivo_com_ia(uploaded_file, start_time, training_duration, min_p
         6.  If a participant joins and leaves multiple times, create a separate JSON object for each action.
         7.  Ignore any header rows or summary information in the file that is not part of the main data table.
         8.  If no valid data is found, return an empty JSON array.
-
-        Example of the desired output format:
-        [
-            {"Full Name": "John Doe", "Timestamp": "07/29/2024, 08:00:00 AM", "Action": "Joined"},
-            {"Full Name": "John Doe", "Timestamp": "07/29/2024, 08:30:00 AM", "Action": "Left"},
-            {"Full Name": "Jane Smith", "Timestamp": "07/29/2024, 08:05:00 AM", "Action": "Joined"}
-        ]
         """
         
         with st.spinner("A IA está analisando o arquivo..."):
@@ -110,17 +113,28 @@ def processar_arquivo_com_ia(uploaded_file, start_time, training_duration, min_p
                     total_duration = timedelta(0)
                     last_join_time = None
                     for _, row in group.iterrows():
-                        if row['Action'] == 'Joined': last_join_time = row['Timestamp']
+                        if row['Action'] == 'Joined':
+                            last_join_time = row['Timestamp']
                         elif row['Action'] == 'Left' and last_join_time is not None:
                             total_duration += row['Timestamp'] - last_join_time
                             last_join_time = None
-                    if last_join_time is not None: total_duration += df['Timestamp'].max() - last_join_time
+                    if last_join_time is not None:
+                        total_duration += df['Timestamp'].max() - last_join_time
                     presence_percentage = (total_duration.total_seconds() / (training_duration * 60)) * 100
                     frequencia_ok = presence_percentage >= min_presence
-                    st.session_state.colaboradores.append({'nome': name, 'frequencia': frequencia_ok})
+                    
+                    st.session_state.colaboradores.append({
+                        'nome': name, 
+                        'frequencia': frequencia_ok,
+                        'check_ins_pontuais': total_check_ins,
+                        'interacoes': total_oportunidades,
+                        'acertos': 7
+                    })
                 st.sidebar.success(f"{len(st.session_state.colaboradores)} colaboradores processados via IA!")
-            else: st.sidebar.warning("Nenhum dado válido de colaborador encontrado no arquivo após a filtragem pela IA.")
-        else: st.sidebar.error(f"A IA não retornou as colunas esperadas. Encontrado: {list(df.columns)}")
+            else:
+                st.sidebar.warning("Nenhum dado válido de colaborador encontrado no arquivo após a filtragem pela IA.")
+        else:
+            st.sidebar.error(f"A IA não retornou as colunas esperadas. Esperado: 'Full Name', 'Timestamp', 'Action'. Encontrado: {list(df.columns)}")
     except Exception as e:
         st.sidebar.error(f"Erro ao processar com a IA: {e}")
 
@@ -131,9 +145,10 @@ def desenhar_formulario_colaboradores(total_oportunidades: int, total_check_ins:
         st.info("Adicione colaboradores manualmente ou carregue uma lista de presença na barra lateral.")
         return
 
-    st.warning("Confira os dados e preencha todos os campos para cada colaborador.")
+    st.warning("Confira os dados. A maioria dos campos já está preenchida com valores padrão. Altere apenas o necessário.")
 
     def on_change_callback():
+        """Callback para limpar os resultados calculados sempre que um dado do formulário for alterado."""
         st.session_state.dados_processados = None
 
     for i, colab in enumerate(st.session_state.colaboradores):
@@ -143,9 +158,9 @@ def desenhar_formulario_colaboradores(total_oportunidades: int, total_check_ins:
             colab_key_prefix = f"{colab.get('nome', '')}_{i}"
             
             st.session_state.colaboradores[i]['nome'] = cols[0].text_input(f"Nome do Colaborador {i+1}", value=colab.get('nome', ''), key=f"nome_{colab_key_prefix}", on_change=on_change_callback, placeholder="Nome completo do colaborador")
-            st.session_state.colaboradores[i]['check_ins_pontuais'] = cols[1].number_input("Check-ins Pontuais", min_value=0, max_value=total_check_ins, step=1, key=f"check_ins_{colab_key_prefix}", value=colab.get('check_ins_pontuais'), on_change=on_change_callback, placeholder="Nº")
-            st.session_state.colaboradores[i]['interacoes'] = cols[2].number_input("Interações Válidas", min_value=0, max_value=total_oportunidades, step=1, key=f"interacoes_{colab_key_prefix}", value=colab.get('interacoes'), on_change=on_change_callback, placeholder="Nº")
-            st.session_state.colaboradores[i]['acertos'] = cols[3].number_input("Acertos na Prova", min_value=0, max_value=10, step=1, key=f"acertos_{colab_key_prefix}", value=colab.get('acertos'), on_change=on_change_callback, placeholder="Nº")
+            st.session_state.colaboradores[i]['check_ins_pontuais'] = cols[1].number_input("Check-ins Pontuais", min_value=0, max_value=total_check_ins, step=1, key=f"check_ins_{colab_key_prefix}", value=colab.get('check_ins_pontuais'), on_change=on_change_callback)
+            st.session_state.colaboradores[i]['interacoes'] = cols[2].number_input("Interações Válidas", min_value=0, max_value=total_oportunidades, step=1, key=f"interacoes_{colab_key_prefix}", value=colab.get('interacoes'), on_change=on_change_callback)
+            st.session_state.colaboradores[i]['acertos'] = cols[3].number_input("Acertos na Prova", min_value=0, max_value=10, step=1, key=f"acertos_{colab_key_prefix}", value=colab.get('acertos'), on_change=on_change_callback)
             st.session_state.colaboradores[i]['frequencia'] = cols[4].checkbox("Frequência OK?", value=colab.get('frequencia', False), key=f"frequencia_{colab_key_prefix}", on_change=on_change_callback)
 
 def validar_dados_colaboradores() -> bool:
