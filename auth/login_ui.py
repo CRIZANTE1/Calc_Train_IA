@@ -11,7 +11,7 @@ def show_login_page() -> bool:
         st.markdown("### Acesso à Calculadora de Treinamento")
         st.write("Por favor, faça login para continuar.")
         
-        if st.button("Fazer Login com a Conta Corporativa", type="primary"):
+        if st.button("Fazer Login", type="primary"):
             st.login()
         return False # Usuário não está logado
 
