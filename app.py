@@ -15,7 +15,6 @@ def main():
     show_user_header()
     show_logout_button()
     
-    # --- NAVEGAÇÃO ENTRE PÁGINAS ---
     st.sidebar.markdown("---")
     page = st.sidebar.radio(
         "Navegação",
@@ -23,9 +22,7 @@ def main():
         key="page_selector"
     )
     
-    # --- ROTEAMENTO DAS PÁGINAS ---
     if page == "Calculadora de Treinamento":
-        # Lógica da página principal
         if 'colaboradores' not in st.session_state:
             st.session_state.colaboradores = []
         if 'dados_processados' not in st.session_state:
@@ -39,18 +36,22 @@ def main():
 
         if st.session_state.colaboradores:
             if st.button("📊 Calcular Resultados Finais", type="primary"):
-                st.session_state.dados_processados = calculos.processar_dados_colaboradores(
-                    st.session_state.colaboradores, 
-                    total_oportunidades,
-                    total_check_ins
-                )
+
+                if interface.validar_dados_colaboradores():
+                    # Se a validação passar, executa o cálculo
+                    st.session_state.dados_processados = calculos.processar_dados_colaboradores(
+                        st.session_state.colaboradores, 
+                        total_oportunidades,
+                        total_check_ins
+                    )
+                    st.success("Cálculo realizado com sucesso! Veja os resultados abaixo.")
+                # Se a validação falhar, a função validar_dados_colaboradores já exibiu o erro.
 
         if st.session_state.dados_processados is not None:
             interface.exibir_tabela_resultados(st.session_state.dados_processados)
             interface.exibir_botao_pdf(st.session_state.dados_processados, training_title)
     
     elif page == "Administração":
-        # Chama a função que desenha a página de admin
         interface.exibir_pagina_admin()
 
     st.sidebar.markdown("---")
