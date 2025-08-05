@@ -239,3 +239,53 @@ def exibir_pagina_admin():
         if st.button("Limpar Cache de Dados"):
             st.cache_data.clear()
             st.success("O cache de dados foi limpo com sucesso!")
+
+
+
+def exibir_pagina_ajuda():
+    """Desenha a interface da página de Ajuda e Demonstração."""
+    
+    st.header("💡 Ajuda e Demonstração em Vídeo")
+    st.markdown("Assista ao vídeo abaixo para um guia completo sobre como utilizar todas as funcionalidades da Calculadora de Treinamento.")
+    
+    # --- Incorporação do Vídeo ---
+    video_url = "https://youtu.be/_3JGK3Qo-U8" 
+    
+    try:
+        st.video(video_url)
+    except Exception as e:
+        st.error(f"Não foi possível carregar o vídeo de demonstração. Verifique o link fornecido.")
+        st.info(f"Erro: {e}")
+
+    st.markdown("---")
+    
+    # --- Instruções Passo a Passo em Texto ---
+    st.subheader("Instruções Rápidas (Passo a Passo)")
+    
+    with st.expander("Passo 1: Login e Configuração do Treinamento"):
+        st.markdown("""
+        1.  **Login:** Use o botão na tela inicial para fazer login com sua conta corporativa.
+        2.  **Configurações:** Na barra lateral esquerda, preencha todos os detalhes do treinamento, como título, número de interações, check-ins e duração.
+        3.  **Presença Mínima:** Ajuste a porcentagem de presença necessária para aprovação no slider. O padrão é 70%.
+        """)
+
+    with st.expander("Passo 2: Carregar a Lista de Colaboradores"):
+        st.markdown("""
+        - **Opção A (Recomendada):** Clique em "Procurar arquivos" para selecionar o relatório de presença (PDF ou CSV). Em seguida, clique em "Processar Arquivo com IA". A lista de colaboradores aparecerá na tela principal.
+        - **Opção B (Manual):** Clique em "Adicionar Colaborador Manualmente" para adicionar linhas de formulário vazias, uma por uma.
+        """)
+
+    with st.expander("Passo 3: Preenchimento dos Dados e Cálculo"):
+        st.markdown("""
+        1.  **Preenchimento:** Para cada colaborador na lista, preencha os campos obrigatórios: "Check-ins Pontuais", "Interações Válidas" e "Acertos na Prova". O sistema não permitirá o cálculo com campos vazios.
+        2.  **Calcular:** Após preencher tudo, clique no botão "Calcular Resultados Finais". Uma tabela com as notas e o status de cada um será exibida na tela.
+        """)
+
+    with st.expander("Passo 4: Geração do Relatório Final"):
+        st.markdown("""
+        - Após o cálculo, um novo botão "Baixar Relatório Detalhado em PDF" aparecerá.
+        - Clique nele para gerar e baixar o relatório final em formato PDF, pronto para arquivamento.
+        """)
+
+    st.markdown("---")
+    st.info("Em caso de dúvidas ou problemas, entre em contato com o desenvolvedor através das informações no rodapé da barra lateral.")
