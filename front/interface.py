@@ -1,11 +1,12 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, time, timedelta
+import time as py_time # Importa o módulo time com um alias para evitar conflitos
 
 # Importações dos pacotes do projeto
 from IA.pdf_qa import PDFQA
 from utils.pdf_generator import generate_pdf_report
-from auth import auth_utils 
+from auth import auth_utils
 
 # --- Funções de Interface do Streamlit ---
 
@@ -15,7 +16,7 @@ def configurar_pagina():
 
 def exibir_cabecalho():
     """Exibe o logo e o título principal da aplicação."""
-    st.image("https://tiinside.com.br/wp-content/uploads/2023/02/Vibra-logo.png", width=200)
+    st.image("https://www.vibraenergia.com.br/wp-content/themes/vibra/static/images/logo-vibra.svg", width=200)
     st.title("Calculadora de Notas de Treinamento")
     st.markdown("Ferramenta para calcular a nota final dos colaboradores com base nos critérios da Instrução de Trabalho `040.010.060.0999.IT`.")
 
@@ -27,35 +28,41 @@ def configurar_barra_lateral():
     total_check_ins = st.sidebar.number_input("Total de Check-ins no Dia", min_value=1, value=2, step=1)
     start_time = st.sidebar.time_input("Horário de Início do Treinamento", value=time(9, 0))
     training_duration = st.sidebar.number_input("Duração Total (min)", min_value=1, value=240, step=10)
-    min_presence = st.sidebar.slider("Mínimo de Presença (%)", min_value=1, max_value=100, value=70, step=1)
+    min_presence = st.sidebar.slider("Mínimo de Presença (%)", min_value=1, max_value=100, value=60, step=1)
 
     st.sidebar.markdown("---")
     st.sidebar.header("📥 Carregar Lista de Presença")
     
     uploaded_file = st.sidebar.file_uploader("1. Selecione o arquivo (CSV ou PDF)", type=['csv', 'pdf'])
     
-    # Botão explícito para iniciar o processamento pela IA, evitando execuções desnecessárias
-    if uploaded_file is not None:
+    if 'last_ia_call_time' not in st.session_state:
+        st.session_state.last_ia_call_time = 0
+
+    cooldown_seconds = 120
+    time_since_last_call = py_time.time() - st.session_state.last_ia_call_time
+    
+    if time_since_last_call < cooldown_seconds:
+        remaining_time = int(cooldown_seconds - time_since_last_call)
+        st.sidebar.warning(f"Aguarde {remaining_time} segundos para usar a IA novamente.")
+        st.sidebar.button("2. Processar Arquivo com IA", disabled=True)
+    elif uploaded_file is not None:
         if st.sidebar.button("2. Processar Arquivo com IA"):
             processar_arquivo_com_ia(uploaded_file, start_time, training_duration, min_presence)
-            # Limpa os resultados antigos para forçar um novo cálculo
-            st.session_state.dados_processados = None 
+            st.session_state.dados_processados = None
+    else:
+        st.sidebar.button("2. Processar Arquivo com IA", disabled=True)
 
     st.sidebar.markdown("---")
     if st.sidebar.button("➕ Adicionar Colaborador Manualmente"):
         if 'colaboradores' not in st.session_state:
             st.session_state.colaboradores = []
         st.session_state.colaboradores.append({})
-        # Limpa os resultados antigos ao adicionar manualmente
         st.session_state.dados_processados = None
     
     return training_title, total_oportunidades, total_check_ins
 
 def processar_arquivo_com_ia(uploaded_file, start_time, training_duration, min_presence):
-    """
-    Processa um arquivo (PDF ou CSV) usando a IA para extrair dados de presença.
-    É chamada apenas quando o botão "Processar Arquivo com IA" é clicado.
-    """
+    """Processa um arquivo (PDF ou CSV) usando a IA e registra o tempo da chamada."""
     try:
         if 'pdf_qa_instance' not in st.session_state:
             st.session_state.pdf_qa_instance = PDFQA()
@@ -84,8 +91,10 @@ def processar_arquivo_com_ia(uploaded_file, start_time, training_duration, min_p
         with st.spinner("A IA está analisando o arquivo..."):
             extracted_data = pdf_qa.extract_structured_data(uploaded_file, extraction_prompt)
 
+        st.session_state.last_ia_call_time = py_time.time()
+
         if not extracted_data:
-            st.sidebar.warning(f"A IA não encontrou dados de colaborador no arquivo '{uploaded_file.name}'. Verifique o formato do arquivo.")
+            st.sidebar.warning(f"A IA não encontrou dados de colaborador no arquivo '{uploaded_file.name}'.")
             return
 
         df = pd.DataFrame(extracted_data)
@@ -101,25 +110,17 @@ def processar_arquivo_com_ia(uploaded_file, start_time, training_duration, min_p
                     total_duration = timedelta(0)
                     last_join_time = None
                     for _, row in group.iterrows():
-                        if row['Action'] == 'Joined':
-                            last_join_time = row['Timestamp']
+                        if row['Action'] == 'Joined': last_join_time = row['Timestamp']
                         elif row['Action'] == 'Left' and last_join_time is not None:
                             total_duration += row['Timestamp'] - last_join_time
                             last_join_time = None
-                    if last_join_time is not None:
-                        total_duration += df['Timestamp'].max() - last_join_time
-
+                    if last_join_time is not None: total_duration += df['Timestamp'].max() - last_join_time
                     presence_percentage = (total_duration.total_seconds() / (training_duration * 60)) * 100
                     frequencia_ok = presence_percentage >= min_presence
-
-                    st.session_state.colaboradores.append({
-                        'nome': name, 'frequencia': frequencia_ok, 'check_ins_pontuais': 0,
-                    })
+                    st.session_state.colaboradores.append({'nome': name, 'frequencia': frequencia_ok})
                 st.sidebar.success(f"{len(st.session_state.colaboradores)} colaboradores processados via IA!")
-            else:
-                st.sidebar.warning("Nenhum dado válido de colaborador encontrado no arquivo após a filtragem pela IA.")
-        else:
-            st.sidebar.error(f"A IA não retornou as colunas esperadas. Esperado: 'Full Name', 'Timestamp', 'Action'. Encontrado: {list(df.columns)}")
+            else: st.sidebar.warning("Nenhum dado válido de colaborador encontrado no arquivo após a filtragem pela IA.")
+        else: st.sidebar.error(f"A IA não retornou as colunas esperadas. Encontrado: {list(df.columns)}")
     except Exception as e:
         st.sidebar.error(f"Erro ao processar com a IA: {e}")
 
@@ -130,10 +131,9 @@ def desenhar_formulario_colaboradores(total_oportunidades: int, total_check_ins:
         st.info("Adicione colaboradores manualmente ou carregue uma lista de presença na barra lateral.")
         return
 
-    st.warning("Confira os dados e preencha o que falta para cada colaborador.")
+    st.warning("Confira os dados e preencha todos os campos para cada colaborador.")
 
     def on_change_callback():
-        """Callback para limpar os resultados calculados sempre que um dado do formulário for alterado."""
         st.session_state.dados_processados = None
 
     for i, colab in enumerate(st.session_state.colaboradores):
@@ -142,11 +142,35 @@ def desenhar_formulario_colaboradores(total_oportunidades: int, total_check_ins:
             cols = st.columns([3, 1, 1, 1, 1])
             colab_key_prefix = f"{colab.get('nome', '')}_{i}"
             
-            st.session_state.colaboradores[i]['nome'] = cols[0].text_input(f"Nome do Colaborador {i+1}", value=colab.get('nome', ''), key=f"nome_{colab_key_prefix}", on_change=on_change_callback)
-            st.session_state.colaboradores[i]['check_ins_pontuais'] = cols[1].number_input("Check-ins Pontuais", min_value=0, max_value=total_check_ins, step=1, key=f"check_ins_{colab_key_prefix}", value=colab.get('check_ins_pontuais', 0), on_change=on_change_callback)
-            st.session_state.colaboradores[i]['interacoes'] = cols[2].number_input("Interações Válidas", min_value=0, max_value=total_oportunidades, step=1, key=f"interacoes_{colab_key_prefix}", value=colab.get('interacoes', 0), on_change=on_change_callback)
-            st.session_state.colaboradores[i]['acertos'] = cols[3].number_input("Acertos na Prova", min_value=0, max_value=10, step=1, key=f"acertos_{colab_key_prefix}", value=colab.get('acertos', 0), on_change=on_change_callback)
+            st.session_state.colaboradores[i]['nome'] = cols[0].text_input(f"Nome do Colaborador {i+1}", value=colab.get('nome', ''), key=f"nome_{colab_key_prefix}", on_change=on_change_callback, placeholder="Nome completo do colaborador")
+            st.session_state.colaboradores[i]['check_ins_pontuais'] = cols[1].number_input("Check-ins Pontuais", min_value=0, max_value=total_check_ins, step=1, key=f"check_ins_{colab_key_prefix}", value=colab.get('check_ins_pontuais'), on_change=on_change_callback, placeholder="Nº")
+            st.session_state.colaboradores[i]['interacoes'] = cols[2].number_input("Interações Válidas", min_value=0, max_value=total_oportunidades, step=1, key=f"interacoes_{colab_key_prefix}", value=colab.get('interacoes'), on_change=on_change_callback, placeholder="Nº")
+            st.session_state.colaboradores[i]['acertos'] = cols[3].number_input("Acertos na Prova", min_value=0, max_value=10, step=1, key=f"acertos_{colab_key_prefix}", value=colab.get('acertos'), on_change=on_change_callback, placeholder="Nº")
             st.session_state.colaboradores[i]['frequencia'] = cols[4].checkbox("Frequência OK?", value=colab.get('frequencia', False), key=f"frequencia_{colab_key_prefix}", on_change=on_change_callback)
+
+def validar_dados_colaboradores() -> bool:
+    """Verifica se todos os campos obrigatórios para cada colaborador foram preenchidos."""
+    if not st.session_state.get('colaboradores'):
+        st.error("Não há colaboradores na lista para validar.")
+        return False
+
+    dados_incompletos = []
+    for i, colab in enumerate(st.session_state.colaboradores):
+        nome = colab.get('nome', '').strip()
+        check_ins = colab.get('check_ins_pontuais')
+        interacoes = colab.get('interacoes')
+        acertos = colab.get('acertos')
+
+        if not nome or check_ins is None or interacoes is None or acertos is None:
+            dados_incompletos.append(f"Colaborador {i+1} (Nome: {nome or 'Vazio'})")
+    
+    if dados_incompletos:
+        st.error("**Dados Incompletos!** Por favor, preencha todos os campos para os seguintes colaboradores antes de calcular:")
+        for item in dados_incompletos:
+            st.warning(f"- {item}")
+        return False
+        
+    return True
 
 def exibir_tabela_resultados(dados_processados: list):
     """Mostra o DataFrame com os resultados na tela."""
@@ -163,40 +187,22 @@ def exibir_tabela_resultados(dados_processados: list):
         return [''] * len(row)
 
     display_df = df_resultados[["Colaborador", "Nota Pontualidade", "Nota Interação", "Nota Avaliação", "Nota Final", "Status"]]
-    st.dataframe(
-        display_df.style.apply(highlight_status, axis=1).format({
-            "Nota Pontualidade": "{:.2f}", "Nota Interação": "{:.2f}",
-            "Nota Avaliação": "{:.2f}", "Nota Final": "{:.2f}",
-        }), 
-        use_container_width=True
-    )
+    st.dataframe(display_df.style.apply(highlight_status, axis=1).format({ "Nota Pontualidade": "{:.2f}", "Nota Interação": "{:.2f}", "Nota Avaliação": "{:.2f}", "Nota Final": "{:.2f}", }), use_container_width=True)
 
 def exibir_botao_pdf(dados_processados: list, training_title: str):
     """Mostra o botão para gerar e baixar o relatório em PDF."""
     st.markdown("---")
     
     df_resultados = pd.DataFrame(dados_processados)
-    
-    # CORREÇÃO: Usando a URL de download direto do Google Drive para a logo.
     logo_url = "https://drive.google.com/uc?export=download&id=1AABdw4iGBJ7tsQ7fR1WGTP5cML3Jlfx_"
     
-    # O resto da função permanece o mesmo.
     with st.spinner("Preparando dados do relatório..."):
         pdf_data = generate_pdf_report(df_resultados, logo_url, training_title)
     
-    st.download_button(
-        label="📄 Baixar Relatório Detalhado em PDF",
-        data=pdf_data,
-        file_name=f"relatorio_{training_title.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf",
-        mime="application/pdf",
-    )
-
-
+    st.download_button(label="📄 Baixar Relatório Detalhado em PDF", data=pdf_data, file_name=f"relatorio_{training_title.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf")
 
 def exibir_pagina_admin():
     """Desenha a interface da página de administração."""
-    
-    # Protege a página inteira. A função check_admin_permission já exibe o erro e para a execução.
     auth_utils.check_admin_permission()
     
     st.header("⚙️ Painel de Administração")
@@ -206,11 +212,7 @@ def exibir_pagina_admin():
     
     with tab1:
         st.subheader("Usuários Autorizados")
-        st.markdown("""
-        A lista abaixo é carregada diretamente do arquivo de segredos (`secrets.toml`) da aplicação. 
-        Para adicionar, remover ou alterar permissões, você deve editar este arquivo e reiniciar a aplicação.
-        """)
-        
+        st.markdown("A lista abaixo é carregada diretamente do arquivo de segredos (`secrets.toml`) da aplicação. Para adicionar, remover ou alterar permissões, você deve editar este arquivo e reiniciar a aplicação.")
         try:
             users_df = auth_utils.get_users_for_display()
             st.dataframe(users_df, use_container_width=True)
@@ -219,12 +221,7 @@ def exibir_pagina_admin():
 
     with tab2:
         st.subheader("Configurações Futuras")
-        st.write("Esta área pode ser usada para outras configurações do sistema, como:")
-        st.markdown("""
-        - Limpar o cache da aplicação.
-        - Visualizar logs de erros.
-        - Gerenciar parâmetros globais.
-        """)
+        st.write("Esta área pode ser usada para outras configurações do sistema.")
         if st.button("Limpar Cache de Dados"):
             st.cache_data.clear()
             st.success("O cache de dados foi limpo com sucesso!")
