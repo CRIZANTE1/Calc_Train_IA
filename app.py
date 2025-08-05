@@ -1,3 +1,4 @@
+
 import streamlit as st
 
 # Importações de outros módulos
@@ -6,13 +7,13 @@ from IA.ai_operations import AIOperations
 from about import show_about_page
 from pages import calculator_page
 
-# Importa TODAS as funções de autenticação e UI do novo arquivo consolidado
 from auth.login_ui import (
     show_login_page,
     show_user_header,
     show_logout_button,
-    get_user_email
+    get_user_email  # Garante que get_user_email também venha daqui
 )
+
 
 st.set_page_config(page_title="Cálculo de Brigadistas", page_icon="🔥", layout="wide")
 
@@ -27,13 +28,13 @@ def main():
     """
     Função principal que orquestra o aplicativo.
     """
-    # A função show_login_page agora controla todo o acesso.
+    # A função show_login_page, importada de login_ui, controla todo o acesso.
     if not show_login_page():
         return
 
     # Se o fluxo continuar, o usuário está autorizado.
-    show_user_header()
-    show_logout_button()
+    show_user_header() # Função importada de login_ui
+    show_logout_button() # Função importada de login_ui
 
     handler, ai_operator = initialize_services()
 
@@ -47,7 +48,8 @@ def main():
     selected_page_function = page_options[selected_page_name]
     
     if selected_page_name == "Cálculo de Brigadistas":
-        user_email = get_user_email()
+        user_email = get_user_email() # Função importada de login_ui
+        # Passa o e-mail para a página da calculadora
         selected_page_function(handler, ai_operator, user_email)
     else:
         selected_page_function()
