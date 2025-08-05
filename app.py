@@ -1,7 +1,11 @@
 import streamlit as st
-from end import calculos
-from front import interface
-from auth.login_ui import show_login_page, show_user_header, show_logout_button
+from utils.google_sheets_handler import GoogleSheetsHandler
+from IA.ai_operations import AIOperations
+from about import show_about_page
+# Esta importação agora funcionará, pois a pasta 'auth' será reconhecida como um pacote
+from auth.login_page import show_login_page, show_logout_button
+from auth.auth_utils import get_user_display_name, get_user_email 
+from pages import calculator_page
 
 def main():
     """Função principal que executa a aplicação Streamlit."""
