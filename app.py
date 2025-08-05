@@ -1,58 +1,65 @@
-
 import streamlit as st
-
-# Importações de outros módulos
-from utils.google_sheets_handler import GoogleSheetsHandler
-from IA.ai_operations import AIOperations
-from about import show_about_page
-from pages import calculator_page
-
-from auth.login_ui import (
-    show_login_page,
-    show_user_header,
-    show_logout_button,
-    get_user_email  # Garante que get_user_email também venha daqui
-)
-
-
-st.set_page_config(page_title="Cálculo de Brigadistas", page_icon="🔥", layout="wide")
-
-@st.cache_resource
-def initialize_services():
-    """Inicializa e retorna os handlers de serviços (Sheets, IA)."""
-    handler = GoogleSheetsHandler()
-    ai_operator = AIOperations()
-    return handler, ai_operator
+from end import calculos
+from front import interface
+from auth.login_ui import show_login_page, show_user_header, show_logout_button
 
 def main():
-    """
-    Função principal que orquestra o aplicativo.
-    """
-    # A função show_login_page, importada de login_ui, controla todo o acesso.
+    """Função principal que executa a aplicação Streamlit."""
+    
+    interface.configurar_pagina()
+
+    # --- FLUXO DE LOGIN ---
     if not show_login_page():
-        return
-
-    # Se o fluxo continuar, o usuário está autorizado.
-    show_user_header() # Função importada de login_ui
-    show_logout_button() # Função importada de login_ui
-
-    handler, ai_operator = initialize_services()
-
-    st.sidebar.title("Navegação")
-    page_options = {
-        "Cálculo de Brigadistas": calculator_page.show_page,
-        "Sobre": show_about_page
-    }
-    selected_page_name = st.sidebar.radio("Selecione uma página", page_options.keys())
+        st.stop()
     
-    selected_page_function = page_options[selected_page_name]
+    show_user_header()
+    show_logout_button()
     
-    if selected_page_name == "Cálculo de Brigadistas":
-        user_email = get_user_email() # Função importada de login_ui
-        # Passa o e-mail para a página da calculadora
-        selected_page_function(handler, ai_operator, user_email)
-    else:
-        selected_page_function()
+    # --- NAVEGAÇÃO ENTRE PÁGINAS ---
+    st.sidebar.markdown("---")
+    # Adicionando a nova página à lista de opções
+    page_options = ["Calculadora de Treinamento", "Administração", "Ajuda e Demonstração"]
+    page = st.sidebar.radio(
+        "Navegação",
+        page_options,
+        key="page_selector"
+    )
+    
+    # --- ROTEAMENTO DAS PÁGINAS ---
+    if page == "Calculadora de Treinamento":
+        if 'colaboradores' not in st.session_state:
+            st.session_state.colaboradores = []
+        if 'dados_processados' not in st.session_state:
+            st.session_state.dados_processados = None
+
+        interface.exibir_cabecalho()
+        training_title, total_oportunidades, total_check_ins = interface.configurar_barra_lateral()
+        interface.desenhar_formulario_colaboradores(total_oportunidades, total_check_ins)
+
+        if st.session_state.colaboradores:
+            if st.button("📊 Calcular Resultados Finais", type="primary"):
+                if interface.validar_dados_colaboradores():
+                    st.session_state.dados_processados = calculos.processar_dados_colaboradores(
+                        st.session_state.colaboradores, 
+                        total_oportunidades,
+                        total_check_ins
+                    )
+                    st.success("Cálculo realizado com sucesso! Veja os resultados abaixo.")
+
+        if st.session_state.dados_processados is not None:
+            interface.exibir_tabela_resultados(st.session_state.dados_processados)
+            interface.exibir_botao_pdf(st.session_state.dados_processados, training_title)
+    
+    elif page == "Administração":
+        interface.exibir_pagina_admin()
+
+    elif page == "Ajuda e Demonstração":
+        # Chama a nova função que desenha a página de ajuda
+        interface.exibir_pagina_ajuda()
+
+    st.sidebar.markdown("---")
+    st.sidebar.caption(f'Desenvolvido por Cristian Ferreira Carlos\nCE9X,+551131038708\ncristiancarlos@vibraenergia.com.br')
 
 if __name__ == "__main__":
     main()
+
