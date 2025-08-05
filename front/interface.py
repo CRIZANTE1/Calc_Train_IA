@@ -16,7 +16,7 @@ def configurar_pagina():
 
 def exibir_cabecalho():
     """Exibe o logo e o título principal da aplicação."""
-    st.image("https://www.movenews.com.br/wp-content/uploads/2022/11/handler.png", width=200)
+    st.image("https://www.movenews.com.br/wp-content/uploads/2022/11/handler.png", width=100)
     st.title("Calculadora de Notas de Treinamento")
     st.markdown("Ferramenta para calcular a nota final dos colaboradores com base nos critérios da Instrução de Trabalho `040.010.060.0999.IT`.")
 
@@ -129,6 +129,7 @@ def processar_arquivo_com_ia(uploaded_file, start_time, training_duration, min_p
                         'acertos': 7
                     })
                 st.sidebar.success(f"{len(st.session_state.colaboradores)} colaboradores processados via IA!")
+                st.rerun()
             else:
                 st.sidebar.warning("Nenhum dado válido de colaborador encontrado no arquivo após a filtragem pela IA.")
         else:
