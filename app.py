@@ -15,13 +15,17 @@ def main():
     show_user_header()
     show_logout_button()
     
+    # --- NAVEGAÇÃO ENTRE PÁGINAS ---
     st.sidebar.markdown("---")
+    # Adicionando a nova página à lista de opções
+    page_options = ["Calculadora de Treinamento", "Administração", "Ajuda e Demonstração"]
     page = st.sidebar.radio(
         "Navegação",
-        ["Calculadora de Treinamento", "Administração"],
+        page_options,
         key="page_selector"
     )
     
+    # --- ROTEAMENTO DAS PÁGINAS ---
     if page == "Calculadora de Treinamento":
         if 'colaboradores' not in st.session_state:
             st.session_state.colaboradores = []
@@ -29,23 +33,18 @@ def main():
             st.session_state.dados_processados = None
 
         interface.exibir_cabecalho()
-        
         training_title, total_oportunidades, total_check_ins = interface.configurar_barra_lateral()
-        
         interface.desenhar_formulario_colaboradores(total_oportunidades, total_check_ins)
 
         if st.session_state.colaboradores:
             if st.button("📊 Calcular Resultados Finais", type="primary"):
-
                 if interface.validar_dados_colaboradores():
-                    # Se a validação passar, executa o cálculo
                     st.session_state.dados_processados = calculos.processar_dados_colaboradores(
                         st.session_state.colaboradores, 
                         total_oportunidades,
                         total_check_ins
                     )
                     st.success("Cálculo realizado com sucesso! Veja os resultados abaixo.")
-                # Se a validação falhar, a função validar_dados_colaboradores já exibiu o erro.
 
         if st.session_state.dados_processados is not None:
             interface.exibir_tabela_resultados(st.session_state.dados_processados)
@@ -53,6 +52,10 @@ def main():
     
     elif page == "Administração":
         interface.exibir_pagina_admin()
+
+    elif page == "Ajuda e Demonstração":
+        # Chama a nova função que desenha a página de ajuda
+        interface.exibir_pagina_ajuda()
 
     st.sidebar.markdown("---")
     st.sidebar.caption(f'Desenvolvido por Cristian Ferreira Carlos\nCE9X,+551131038708\ncristiancarlos@vibraenergia.com.br')
