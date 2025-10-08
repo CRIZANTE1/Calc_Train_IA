@@ -38,7 +38,7 @@ def configurar_barra_lateral():
     if 'last_ia_call_time' not in st.session_state:
         st.session_state.last_ia_call_time = 0
 
-    cooldown_seconds = 120
+    cooldown_seconds = 60
     time_since_last_call = py_time.time() - st.session_state.last_ia_call_time
     
     if time_since_last_call < cooldown_seconds:
@@ -118,6 +118,8 @@ def processar_arquivo_com_ia(uploaded_file, start_time, training_duration, min_p
         
         with st.spinner("A IA está analisando o arquivo..."):
             extracted_data = pdf_qa.extract_structured_data(uploaded_file, extraction_prompt, csv_data=csv_data_for_ia)
+
+        st.session_state.last_ia_call_time = py_time.time()
 
         if not extracted_data:
             st.sidebar.warning(f"A IA não encontrou dados de colaborador no arquivo '{uploaded_file.name}'.")
