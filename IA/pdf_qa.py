@@ -44,18 +44,22 @@ class PDFQA:
             return match.group(1)
         return text.strip()
 
-    def extract_structured_data(self, uploaded_file, prompt):
+    def extract_structured_data(self, uploaded_file, prompt, csv_data=None):
         """
         Extrai dados estruturados de um arquivo (PDF, CSV, etc.) usando a IA.
         """
-        if not uploaded_file:
+        if not uploaded_file and not csv_data:
             st.warning("Nenhum arquivo fornecido para extração.")
             return None
 
         try:
-            with st.spinner(f"Analisando '{uploaded_file.name}' com IA para extrair dados..."):
-                file_bytes = uploaded_file.getvalue()
-                mime_type = uploaded_file.type
+            with st.spinner(f"Analisando com IA para extrair dados..."):
+                if csv_data:
+                    file_bytes = csv_data.encode('utf-8')
+                    mime_type = 'text/csv'
+                else:
+                    file_bytes = uploaded_file.getvalue()
+                    mime_type = uploaded_file.type
 
                 file_part = {"mime_type": mime_type, "data": file_bytes}
                 

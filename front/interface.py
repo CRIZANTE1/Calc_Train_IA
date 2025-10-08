@@ -75,6 +75,25 @@ def processar_arquivo_com_ia(uploaded_file, start_time, training_duration, min_p
         if 'pdf_qa_instance' not in st.session_state:
             st.session_state.pdf_qa_instance = PDFQA()
         pdf_qa = st.session_state.pdf_qa_instance
+
+        csv_data_for_ia = None
+        # Pré-processamento para arquivos CSV
+        if uploaded_file.type == "text/csv":
+            uploaded_file.seek(0)
+            content = uploaded_file.read().decode("utf-8")
+            lines = content.splitlines()
+            
+            start_index = -1
+            for i, line in enumerate(lines):
+                if "3. Atividades em Reunião" in line:
+                    start_index = i + 1
+                    break
+            
+            if start_index != -1:
+                csv_data_for_ia = "\n".join(lines[start_index:])
+            else:
+                st.sidebar.warning("Não foi possível encontrar a seção 'Atividades em Reunião' no arquivo CSV.")
+                return
         
         extraction_prompt = """
         Your task is to act as an attendance sheet processor.
@@ -90,9 +109,7 @@ def processar_arquivo_com_ia(uploaded_file, start_time, training_duration, min_p
         """
         
         with st.spinner("A IA está analisando o arquivo..."):
-            extracted_data = pdf_qa.extract_structured_data(uploaded_file, extraction_prompt)
-
-        st.session_state.last_ia_call_time = py_time.time()
+            extracted_data = pdf_qa.extract_structured_data(uploaded_file, extraction_prompt, csv_data=csv_data_for_ia)
 
         if not extracted_data:
             st.sidebar.warning(f"A IA não encontrou dados de colaborador no arquivo '{uploaded_file.name}'.")
