@@ -80,7 +80,15 @@ def processar_arquivo_com_ia(uploaded_file, start_time, training_duration, min_p
         # Pré-processamento para arquivos CSV
         if uploaded_file.type == "text/csv":
             uploaded_file.seek(0)
-            content = uploaded_file.read().decode("utf-8")
+            content_bytes = uploaded_file.read()
+            try:
+                content = content_bytes.decode("utf-8-sig")
+            except UnicodeDecodeError:
+                try:
+                    content = content_bytes.decode("utf-16")
+                except UnicodeDecodeError:
+                    content = content_bytes.decode("latin-1")
+            
             lines = content.splitlines()
             
             start_index = -1
