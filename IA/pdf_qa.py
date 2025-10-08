@@ -70,21 +70,25 @@ class PDFQA:
                     prompt_tokens=prompt_tokens_estimate
                 )
                 
-                cleaned_response = self._clean_json_string(response.text)
-                extracted_data = json.loads(cleaned_response)
-                
-                st.success(f"Dados extraídos com sucesso de '{uploaded_file.name}'!")
-                return extracted_data
+                if response and response.text:
+                    cleaned_response = self._clean_json_string(response.text)
+                    extracted_data = json.loads(cleaned_response)
+                    
+                    st.success(f"Dados extraídos com sucesso de '{uploaded_file.name}'!")
+                    return extracted_data
+                else:
+                    st.error("A IA não retornou uma resposta válida. A resposta estava vazia.")
+                    return None
                 
         except json.JSONDecodeError:
             st.error("Erro na extração: A IA não retornou um JSON válido. Verifique o documento ou o prompt.")
-            try:
+            if 'response' in locals() and response.text:
                 st.text_area("Resposta recebida da IA (para depuração):", value=response.text, height=150)
-            except NameError:
-                pass
             return None
         except Exception as e:
             st.error(f"Ocorreu um erro ao processar o arquivo com a IA: {e}")
+            if 'response' in locals() and response.text:
+                st.text_area("Resposta recebida da IA (para depuração):", value=response.text, height=150)
             return None
             
 
