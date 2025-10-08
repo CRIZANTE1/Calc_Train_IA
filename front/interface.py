@@ -178,7 +178,7 @@ def desenhar_formulario_colaboradores(total_oportunidades: int, total_check_ins:
     for i, colab in enumerate(st.session_state.colaboradores):
         st.markdown(f"---")
         with st.container():
-            cols = st.columns([3, 1, 1, 1, 1])
+            cols = st.columns([3, 1, 1, 1, 1, 1])
             colab_key_prefix = f"{colab.get('nome', '')}_{i}"
             
             st.session_state.colaboradores[i]['nome'] = cols[0].text_input(f"Nome do Colaborador {i+1}", value=colab.get('nome', ''), key=f"nome_{colab_key_prefix}", on_change=on_change_callback, placeholder="Nome completo do colaborador")
@@ -186,6 +186,10 @@ def desenhar_formulario_colaboradores(total_oportunidades: int, total_check_ins:
             st.session_state.colaboradores[i]['interacoes'] = cols[2].number_input("Interações Válidas", min_value=0, max_value=total_oportunidades, step=1, key=f"interacoes_{colab_key_prefix}", value=colab.get('interacoes'), on_change=on_change_callback)
             st.session_state.colaboradores[i]['acertos'] = cols[3].number_input("Acertos na Prova", min_value=0, max_value=10, step=1, key=f"acertos_{colab_key_prefix}", value=colab.get('acertos'), on_change=on_change_callback)
             st.session_state.colaboradores[i]['frequencia'] = cols[4].checkbox("Frequência OK?", value=colab.get('frequencia', False), key=f"frequencia_{colab_key_prefix}", on_change=on_change_callback)
+
+            if cols[5].button("🗑️ Remover", key=f"remover_{colab_key_prefix}"):
+                st.session_state.colaboradores.pop(i)
+                st.rerun()
 
 def validar_dados_colaboradores() -> bool:
     """Verifica se todos os campos obrigatórios para cada colaborador foram preenchidos."""
