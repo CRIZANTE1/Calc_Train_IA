@@ -33,7 +33,7 @@ def configurar_barra_lateral():
     st.sidebar.markdown("---")
     st.sidebar.header("📥 Carregar Lista de Presença")
     
-    uploaded_file = st.sidebar.file_uploader("1. Selecione o arquivo (CSV ou PDF)", type=['csv', 'pdf'])
+    uploaded_file = st.sidebar.file_uploader("1. Selecione o arquivo (CSV, PDF ou XLSX)", type=['csv', 'pdf', 'xlsx'])
     
     if 'last_ia_call_time' not in st.session_state:
         st.session_state.last_ia_call_time = 0
@@ -126,8 +126,12 @@ def processar_arquivo_com_ia(uploaded_file, start_time, training_duration, min_p
             st.sidebar.info("Arquivo PDF detectado. A IA irá extrair os dados diretamente.")
             # Para PDF, não precisa de pré-processamento
             pass
+        elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+            st.sidebar.info("Arquivo XLSX detectado. A IA irá extrair os dados diretamente.")
+            # Para XLSX, não precisa de pré-processamento, similar ao PDF
+            pass
         else:
-            st.sidebar.error(f"Tipo de arquivo não suportado: {uploaded_file.type}. Use apenas CSV ou PDF.")
+            st.sidebar.error(f"Tipo de arquivo não suportado: {uploaded_file.type}. Use apenas CSV, PDF ou XLSX.")
             return
 
         extraction_prompt = """
@@ -334,7 +338,7 @@ def exibir_pagina_ajuda():
 
     with st.expander("Passo 2: Carregar a Lista de Colaboradores"):
         st.markdown("""
-        - **Opção A (Recomendada):** Clique em "Procurar arquivos" para selecionar o relatório de presença (PDF ou CSV). Em seguida, clique em "Processar Arquivo com IA". A lista de colaboradores aparecerá na tela principal.
+        - **Opção A (Recomendada):** Clique em "Procurar arquivos" para selecionar o relatório de presença (CSV, XLSX ou PDF). Em seguida, clique em "Processar Arquivo com IA". A lista de colaboradores aparecerá na tela principal.
         - **Opção B (Manual):** Clique em "Adicionar Colaborador Manualmente" para adicionar linhas de formulário vazias, uma por uma.
         """)
 
