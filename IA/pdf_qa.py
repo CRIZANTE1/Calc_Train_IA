@@ -10,7 +10,7 @@ class PDFQA:
     def __init__(self):
         load_api()
 
-        self.model = genai.GenerativeModel('gemini-2.5-pro')
+        self.model = genai.GenerativeModel('gemini-2.5-flash')
         self.limiter = RateLimiter(rpm_limit=15, tpm_limit=1_000_000)
 
     def ask_gemini(self, pdf_files, question):
