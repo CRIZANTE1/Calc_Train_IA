@@ -71,38 +71,65 @@ def configurar_barra_lateral():
 
 def processar_arquivo_com_ia(uploaded_file, start_time, training_duration, min_presence, total_check_ins, total_oportunidades):
     """Processa um arquivo (PDF ou CSV) e preenche os colaboradores com valores padrão."""
+
+    # Adicionar validação de arquivo no início
+    if uploaded_file is None:
+        st.sidebar.error("Nenhum arquivo foi enviado.")
+        return
+
+    # Adicionar log de tipo de arquivo
+    st.sidebar.info(f"Processando arquivo: {uploaded_file.name} (Tipo: {uploaded_file.type})")
+
     try:
         if 'pdf_qa_instance' not in st.session_state:
             st.session_state.pdf_qa_instance = PDFQA()
         pdf_qa = st.session_state.pdf_qa_instance
 
         csv_data_for_ia = None
-        # Pré-processamento para arquivos CSV
-        if uploaded_file.type == "text/csv":
+
+        # Melhorar o tratamento de CSV
+        if uploaded_file.type in ["text/csv", "application/vnd.ms-excel"]:
             uploaded_file.seek(0)
             content_bytes = uploaded_file.read()
-            try:
-                content = content_bytes.decode("utf-8-sig")
-            except UnicodeDecodeError:
+
+            # Tentar múltiplas codificações
+            content = None
+            for encoding in ["utf-8-sig", "utf-8", "utf-16", "latin-1", "iso-8859-1"]:
                 try:
-                    content = content_bytes.decode("utf-16")
+                    content = content_bytes.decode(encoding)
+                    st.sidebar.success(f"Arquivo decodificado com sucesso usando {encoding}")
+                    break
                 except UnicodeDecodeError:
-                    content = content_bytes.decode("latin-1")
-            
+                    continue
+
+            if content is None:
+                st.sidebar.error("Não foi possível decodificar o arquivo CSV. Tente salvar o arquivo com codificação UTF-8.")
+                return
+
             lines = content.splitlines()
-            
+
             start_index = -1
             for i, line in enumerate(lines):
-                if "3. Atividades em Reunião" in line:
+                if "3. Atividades em Reunião" in line or "Atividades em Reunião" in line:
                     start_index = i + 1
                     break
-            
+
             if start_index != -1:
                 csv_data_for_ia = "\n".join(lines[start_index:])
+                st.sidebar.success(f"Seção de atividades encontrada. {len(lines) - start_index} linhas para processar.")
             else:
-                st.sidebar.warning("Não foi possível encontrar a seção 'Atividades em Reunião' no arquivo CSV.")
-                return
-        
+                # Se não encontrar a seção, tenta processar o arquivo inteiro
+                st.sidebar.warning("Seção 'Atividades em Reunião' não encontrada. Processando arquivo completo.")
+                csv_data_for_ia = content
+
+        elif uploaded_file.type == "application/pdf":
+            st.sidebar.info("Arquivo PDF detectado. A IA irá extrair os dados diretamente.")
+            # Para PDF, não precisa de pré-processamento
+            pass
+        else:
+            st.sidebar.error(f"Tipo de arquivo não suportado: {uploaded_file.type}. Use apenas CSV ou PDF.")
+            return
+
         extraction_prompt = """
         Your task is to act as an attendance sheet processor.
         From the provided file (which can be a PDF or a text/csv file), do the following:
@@ -115,21 +142,26 @@ def processar_arquivo_com_ia(uploaded_file, start_time, training_duration, min_p
         7.  Ignore any header rows or summary information in the file that is not part of the main data table.
         8.  If no valid data is found, return an empty JSON array.
         """
-        
         with st.spinner("A IA está analisando o arquivo..."):
-            extracted_data = pdf_qa.extract_structured_data(uploaded_file, extraction_prompt, csv_data=csv_data_for_ia)
+            try:
+                extracted_data = pdf_qa.extract_structured_data(uploaded_file, extraction_prompt, csv_data=csv_data_for_ia)
+            except Exception as extraction_error:
+                st.sidebar.error(f"Erro durante a extração de dados: {str(extraction_error)}")
+                st.sidebar.exception(extraction_error)
+                return
 
         st.session_state.last_ia_call_time = py_time.time()
 
         if not extracted_data:
-            st.sidebar.warning(f"A IA não encontrou dados de colaborador no arquivo '{uploaded_file.name}'.")
+            st.sidebar.warning(f"A IA não encontrou dados válidos no arquivo '{uploaded_file.name}'.")
+            st.sidebar.info("Verifique se o arquivo contém os dados esperados (Nome, Timestamp, Ação).")
             return
 
         df = pd.DataFrame(extracted_data)
-        
+
         if 'Full Name' in df.columns and 'Timestamp' in df.columns and 'Action' in df.columns:
             df['Timestamp'] = pd.to_datetime(df['Timestamp'], format='%m/%d/%Y, %I:%M:%S %p', errors='coerce')
-            df.dropna(subset=['Timestamp'], inplace=True) 
+            df.dropna(subset=['Timestamp'], inplace=True)
             df = df.sort_values(by=['Full Name', 'Timestamp'])
 
             st.session_state.colaboradores = []
@@ -147,9 +179,9 @@ def processar_arquivo_com_ia(uploaded_file, start_time, training_duration, min_p
                         total_duration += df['Timestamp'].max() - last_join_time
                     presence_percentage = (total_duration.total_seconds() / (training_duration * 60)) * 100
                     frequencia_ok = presence_percentage >= min_presence
-                    
+
                     st.session_state.colaboradores.append({
-                        'nome': name, 
+                        'nome': name,
                         'frequencia': frequencia_ok,
                         'check_ins_pontuais': total_check_ins,
                         'interacoes': total_oportunidades,

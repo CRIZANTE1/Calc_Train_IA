@@ -58,8 +58,13 @@ class PDFQA:
                     file_bytes = csv_data.encode('utf-8')
                     mime_type = 'text/csv'
                 else:
-                    file_bytes = uploaded_file.getvalue()
+                    # Garantir que o arquivo está no início
+                    uploaded_file.seek(0)
+                    file_bytes = uploaded_file.read()
                     mime_type = uploaded_file.type
+                    
+                    # Log do tamanho do arquivo
+                    st.info(f"Arquivo carregado: {len(file_bytes)} bytes")
 
                 file_part = {"mime_type": mime_type, "data": file_bytes}
                 
