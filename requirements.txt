@@ -4,3 +4,4 @@ weasyprint
 requests
 google-generativeai
 Authlib
+openpyxl

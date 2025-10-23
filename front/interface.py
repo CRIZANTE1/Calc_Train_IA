@@ -32,8 +32,8 @@ def configurar_barra_lateral():
 
     st.sidebar.markdown("---")
     st.sidebar.header("📥 Carregar Lista de Presença")
-    
-    uploaded_file = st.sidebar.file_uploader("1. Selecione o arquivo (CSV, PDF ou XLSX)", type=['csv', 'pdf', 'xlsx'])
+
+    uploaded_file = st.sidebar.file_uploader("1. Selecione o arquivo (CSV, XLSX ou PDF)", type=['csv', 'xlsx', 'xls', 'pdf'])
     
     if 'last_ia_call_time' not in st.session_state:
         st.session_state.last_ia_call_time = 0
@@ -70,7 +70,7 @@ def configurar_barra_lateral():
     return training_title, total_oportunidades, total_check_ins
 
 def processar_arquivo_com_ia(uploaded_file, start_time, training_duration, min_presence, total_check_ins, total_oportunidades):
-    """Processa um arquivo (PDF ou CSV) e preenche os colaboradores com valores padrão."""
+    """Processa um arquivo (PDF, CSV ou Excel) e preenche os colaboradores com valores padrão."""
 
     # Adicionar validação de arquivo no início
     if uploaded_file is None:
@@ -87,8 +87,39 @@ def processar_arquivo_com_ia(uploaded_file, start_time, training_duration, min_p
 
         csv_data_for_ia = None
 
-        # Melhorar o tratamento de CSV
-        if uploaded_file.type in ["text/csv", "application/vnd.ms-excel"]:
+        # Processar arquivos Excel (XLSX/XLS)
+        if uploaded_file.type in ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                   "application/vnd.ms-excel"]:
+            uploaded_file.seek(0)
+
+            try:
+                # Ler o arquivo Excel
+                df_excel = pd.read_excel(uploaded_file, engine='openpyxl')
+                st.sidebar.success(f"Arquivo Excel lido com sucesso. {len(df_excel)} linhas encontradas.")
+
+                # Procurar pela seção de atividades
+                start_index = -1
+                for i, row in df_excel.iterrows():
+                    if any("Atividades em Reunião" in str(cell) for cell in row.values):
+                        start_index = i + 1
+                        break
+
+                if start_index != -1:
+                    df_filtered = df_excel.iloc[start_index:]
+                    st.sidebar.success(f"Seção de atividades encontrada. {len(df_filtered)} linhas para processar.")
+                else:
+                    st.sidebar.warning("Seção 'Atividades em Reunião' não encontrada. Processando planilha completa.")
+                    df_filtered = df_excel
+
+                # Converter para CSV em memória para enviar à IA
+                csv_data_for_ia = df_filtered.to_csv(index=False)
+
+            except Exception as excel_error:
+                st.sidebar.error(f"Erro ao processar arquivo Excel: {str(excel_error)}")
+                return
+
+        # Processar arquivos CSV
+        elif uploaded_file.type in ["text/csv", "application/csv"]:
             uploaded_file.seek(0)
             content_bytes = uploaded_file.read()
 
@@ -118,40 +149,72 @@ def processar_arquivo_com_ia(uploaded_file, start_time, training_duration, min_p
                 csv_data_for_ia = "\n".join(lines[start_index:])
                 st.sidebar.success(f"Seção de atividades encontrada. {len(lines) - start_index} linhas para processar.")
             else:
-                # Se não encontrar a seção, tenta processar o arquivo inteiro
                 st.sidebar.warning("Seção 'Atividades em Reunião' não encontrada. Processando arquivo completo.")
                 csv_data_for_ia = content
 
+        # Processar arquivos PDF
         elif uploaded_file.type == "application/pdf":
             st.sidebar.info("Arquivo PDF detectado. A IA irá extrair os dados diretamente.")
-            # Para PDF, não precisa de pré-processamento
             pass
-        elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
-            st.sidebar.info("Arquivo XLSX detectado. A IA irá extrair os dados diretamente.")
-            # Para XLSX, não precisa de pré-processamento, similar ao PDF
-            pass
+
         else:
-            st.sidebar.error(f"Tipo de arquivo não suportado: {uploaded_file.type}. Use apenas CSV, PDF ou XLSX.")
+            st.sidebar.error(f"Tipo de arquivo não suportado: {uploaded_file.type}. Use apenas CSV, XLSX ou PDF.")
             return
 
         extraction_prompt = """
         Your task is to act as an attendance sheet processor.
-        From the provided file (which can be a PDF or a text/csv file), do the following:
-        1.  Extract the full name of each participant. The column might be 'Full Name' or 'Nome Completo'.
-        2.  Extract the timestamp of each action. The column might be 'Timestamp'.
-        3.  Extract the action itself. The column might be 'User Action' or 'Action'. The values are typically 'Joined' and 'Left'.
+        From the provided file (which can be a PDF, CSV, or Excel file), do the following:
+
+        1.  Extract the full name of each participant. Look for columns like:
+            - 'Full Name', 'Nome Completo', 'Nome', 'Name', 'Participante', 'Participant'
+
+        2.  Extract the timestamp of each action. Look for columns like:
+            - 'Timestamp', 'Data/Hora', 'Date/Time', 'Horário', 'Time'
+
+        3.  Extract the action itself. Look for columns like:
+            - 'User Action', 'Action', 'Ação', 'Ação do usuário'
+            - The values are typically: 'Joined', 'Left', 'Entrou', 'Saiu', 'Ingressou', 'Left Meeting', 'Joined Meeting'
+
         4.  Return the data as a clean JSON array of objects. Each object must have three keys: "Full Name", "Timestamp", and "Action".
-        5.  Ensure the 'Timestamp' is in the format 'MM/DD/YYYY, HH:MM:SS AM/PM'.
-        6.  If a participant joins and leaves multiple times, create a separate JSON object for each action.
-        7.  Ignore any header rows or summary information in the file that is not part of the main data table.
-        8.  If no valid data is found, return an empty JSON array.
+
+        5.  For the 'Timestamp' field:
+            - If in format 'MM/DD/YYYY, HH:MM:SS AM/PM', keep as is
+            - If in format 'DD/MM/YYYY HH:MM:SS', convert to 'MM/DD/YYYY, HH:MM:SS AM/PM'
+            - If in any other format, try to parse and convert to 'MM/DD/YYYY, HH:MM:SS AM/PM'
+
+        6.  For the 'Action' field, normalize to either 'Joined' or 'Left':
+            - 'Joined', 'Entrou', 'Ingressou', 'Joined Meeting' → 'Joined'
+            - 'Left', 'Saiu', 'Left Meeting' → 'Left'
+
+        7.  If a participant joins and leaves multiple times, create a separate JSON object for each action.
+
+        8.  Ignore any header rows, summary information, or metadata that is not part of the main attendance data.
+
+        9.  Skip any rows where the participant name is empty or appears to be a header/label.
+
+        10. If no valid data is found, return an empty JSON array: []
+
+        Example of expected output:
+        [
+            {"Full Name": "João Silva", "Timestamp": "10/17/2025, 09:00:00 AM", "Action": "Joined"},
+            {"Full Name": "João Silva", "Timestamp": "10/17/2025, 12:00:00 PM", "Action": "Left"}
+        ]
         """
         with st.spinner("A IA está analisando o arquivo..."):
             try:
                 extracted_data = pdf_qa.extract_structured_data(uploaded_file, extraction_prompt, csv_data=csv_data_for_ia)
+
+                # Log do que foi extraído
+                if extracted_data:
+                    st.sidebar.success(f"IA extraiu {len(extracted_data)} registros.")
+                    # Mostrar uma amostra dos dados
+                    with st.sidebar.expander("Ver amostra dos dados extraídos"):
+                        st.json(extracted_data[:3] if len(extracted_data) > 3 else extracted_data)
+
             except Exception as extraction_error:
                 st.sidebar.error(f"Erro durante a extração de dados: {str(extraction_error)}")
-                st.sidebar.exception(extraction_error)
+                import traceback
+                st.sidebar.text(traceback.format_exc())
                 return
 
         st.session_state.last_ia_call_time = py_time.time()
