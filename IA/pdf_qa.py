@@ -12,7 +12,7 @@ class PDFQA:
         # Agora self.client é a instância do genai.Client
         self.client = load_api()
         # Atualize o nome do modelo conforme necessário (ex: gemini-2.0-flash ou 1.5-flash)
-        self.model_name = 'gemini-3-flash-preview' 
+        self.model_name = 'gemini-2.5-flash' 
         self.limiter = RateLimiter(rpm_limit=15, tpm_limit=1_000_000)
 
     def ask_gemini(self, pdf_files, question):
