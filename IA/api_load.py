@@ -1,5 +1,5 @@
 import os
-import google.generativeai as genai
+from google import genai
 import streamlit as st
 import logging
 
@@ -18,10 +18,8 @@ def load_api():
         except (KeyError, TypeError, AttributeError):
             logging.info("API key not found in Streamlit secrets, trying environment variables.")
         
-        # 2. Se não encontrou nos secrets, tentar carregar do arquivo .env (desenvolvimento)
+        # 2. Se não encontrou nos secrets, tentar carregar do arquivo .env
         if not api_key:
-            # Load environment variables from .env file
-            # load_dotenv()  # Removido para Streamlit Cloud
             api_key = os.getenv('GOOGLE_API_KEY')
             if api_key:
                 logging.info("API key loaded from .env file.")
@@ -33,10 +31,10 @@ def load_api():
             st.error(error_msg)
             return None
 
-        # Configurar a API Gemini com a chave encontrada
-        genai.configure(api_key=api_key)
-        logging.info("API loaded successfully.")
-        return genai
+        # Instanciar o Cliente da nova SDK
+        client = genai.Client(api_key=api_key)
+        logging.info("API Client loaded successfully.")
+        return client
 
     except Exception as e:
         error_msg = f"Error loading API: {str(e)}"
